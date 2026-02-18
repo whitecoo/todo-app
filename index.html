@@ -44,12 +44,13 @@ input[type="color"]::-webkit-color-swatch{border-radius:6px;border:2px solid #D5
 const{useState,useEffect,useCallback,useMemo,useRef,createElement:h}=React;
 const DK=["일","월","화","수","목","금","토"];
 const DTAGS=[{id:"work",name:"업무",color:"#3B82F6"},{id:"personal",name:"개인",color:"#10B981"},{id:"urgent",name:"긴급",color:"#EF4444"}];
-const SK={t:"td4-t",a:"td4-a",g:"td4-g",r:"td4-r",noti:"td4-ni",sort:"td4-sort",dt:"td4-dt",showMS:"td4-sms",showRV:"td4-srv",rvColor:"td4-rvc"};
+const SK={t:"td4-t",a:"td4-a",g:"td4-g",r:"td4-r",noti:"td4-ni",sort:"td4-sort",dt:"td4-dt",showMS:"td4-sms",showRV:"td4-srv",rvColor:"td4-rvc",st:"td4-st",sr:"td4-sr",sdt:"td4-sdt",sa:"td4-sa"};
 const NOTI_OPTS=[{v:30,l:'30분 전'},{v:60,l:'1시간 전'},{v:120,l:'2시간 전'}];
 function ld(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f}catch(e){return f}}
 function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 function fmt(s){const d=new Date(s);return{m:d.getMonth()+1,d:d.getDate(),w:DK[d.getDay()],t:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}}
 function todayStr(){const n=new Date();return n.getFullYear()+'. '+String(n.getMonth()+1).padStart(2,'0')+'. '+String(n.getDate()).padStart(2,'0')+'. '+DK[n.getDay()]+'요일'}
+function todayParts(){const n=new Date();return{date:n.getFullYear()+'. '+String(n.getMonth()+1).padStart(2,'0')+'. '+String(n.getDate()).padStart(2,'0')+'.',day:DK[n.getDay()]+'요일'}}
 function toDS(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function daysBetween(a,b){return Math.ceil((b-a)/(864e5))+1}
 // ★ Parse date string as LOCAL time (not UTC) to fix timezone issues
@@ -98,6 +99,8 @@ function App(){
   const[erT,sERT]=useState('');const[erSD,sERSD]=useState('');const[erED,sERED]=useState('');const[erTg,sERTg]=useState('');
   const[erMemo,sERMemo]=useState('');
   const[viewOnly,setViewOnly]=useState(false);
+  const[editSource,setEditSource]=useState('personal');
+  const[writeMode,setWriteMode]=useState('personal');
   const[vm,setVm]=useState('list');
   const[cm,setCm]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()}});
   const[notiPerm,setNotiPerm]=useState(typeof Notification!=='undefined'?Notification.permission:'denied');
@@ -123,6 +126,11 @@ function App(){
   const[showReceived,setShowReceived]=useState(()=>ld(SK.showRV,true));
   const[rvColor,setRvColor]=useState(()=>ld(SK.rvColor,'#E91E8B'));
   const touchStartRef=useRef(null);
+  // ★ SHARED DATA states
+  const[shTodos,setShTodos]=useState(()=>ld(SK.st,[]));
+  const[shRecords,setShRecords]=useState(()=>ld(SK.sr,[]));
+  const[shDailyTasks,setShDailyTasks]=useState(()=>ld(SK.sdt,[]));
+  const[shArchive,setShArchive]=useState(()=>ld(SK.sa,[]));
 
   useEffect(()=>{
     const onResize=()=>{
@@ -189,6 +197,10 @@ function App(){
   const sA=useCallback(a=>{setArchive(a);sv(SK.a,a)},[]);
   const sTg=useCallback(t=>{setTags(t);sv(SK.g,t)},[]);
   const sR=useCallback(r=>{setRecords(r);sv(SK.r,r)},[]);
+  const sShT=useCallback(t=>{setShTodos(t);sv(SK.st,t)},[]);
+  const sShR=useCallback(r=>{setShRecords(r);sv(SK.sr,r)},[]);
+  const sShDT=useCallback(dt=>{setShDailyTasks(dt);sv(SK.sdt,dt)},[]);
+  const sShA=useCallback(a=>{setShArchive(a);sv(SK.sa,a)},[]);
   const gT=id=>tags.find(t=>t.id===id);
 
   const askConfirm=(title,msg,onOk,okLabel,okColor)=>{
@@ -359,36 +371,38 @@ function App(){
     if(!nT.trim())return;
     const dt=nD&&nTi?nD+'T'+nTi:nD?nD+'T00:00':new Date().toISOString();
     const notiAt=(nNotiBefore==='custom'&&nNotiAtD&&nNotiAtT)?nNotiAtD+'T'+nNotiAtT:null;
-    sT([...todos,{id:Date.now().toString(),title:nT.trim(),memo:nMemo.trim()||'',datetime:dt,tagId:nTg||null,notiOn:nNotiOn,notiBefore:nNotiBefore==='custom'?null:nNotiBefore,notiAt:notiAt,createdAt:new Date().toISOString()}].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));
+    const item={id:Date.now().toString(),title:nT.trim(),memo:nMemo.trim()||'',datetime:dt,tagId:nTg||null,notiOn:nNotiOn,notiBefore:nNotiBefore==='custom'?null:nNotiBefore,notiAt:notiAt,createdAt:new Date().toISOString()};
+    if(writeMode==='shared'){sShT([...shTodos,item].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
+    else{sT([...todos,item].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
     sNT('');sND('');sNTi('');sNTg('');sNMemo('');sNNotiOn(true);sNNotiBefore(30);sNNotiAtD('');sNNotiAtT('');setShowAdd(false);
   };
-  const completeTodo=id=>{
+  const completeTodo=(id,src)=>{
     setFadingOut(p=>new Set([...p,id]));
     setTimeout(()=>{
-      const t=todos.find(x=>x.id===id);
-      if(t){sA([{...t,completedAt:new Date().toISOString()},...archive]);sT(todos.filter(x=>x.id!==id))}
+      if(src==='shared'){const t=shTodos.find(x=>x.id===id);if(t){sShA([{...t,completedAt:new Date().toISOString()},...shArchive]);sShT(shTodos.filter(x=>x.id!==id))}}
+      else{const t=todos.find(x=>x.id===id);if(t){sA([{...t,completedAt:new Date().toISOString()},...archive]);sT(todos.filter(x=>x.id!==id))}}
       setFadingOut(p=>{const n=new Set(p);n.delete(id);return n});
       showToast('✓ 완료 처리됨');
     },350);
   };
-  const restoreTodo=todo=>{
+  const restoreTodo=(todo,src)=>{
     if(todo.isDailyTask){
-      sDT([...dailyTasks,{id:Date.now().toString(),title:todo.title,done:false,date:todayDS}]);
-      sA(archive.filter(x=>x.id!==todo.id||(x.completedAt!==todo.completedAt)));
+      if(src==='shared'){sShDT([...shDailyTasks,{id:Date.now().toString(),title:todo.title,done:false,date:todayDS}]);sShA(shArchive.filter(x=>x.id!==todo.id||(x.completedAt!==todo.completedAt)))}
+      else{sDT([...dailyTasks,{id:Date.now().toString(),title:todo.title,done:false,date:todayDS}]);sA(archive.filter(x=>x.id!==todo.id||(x.completedAt!==todo.completedAt)))}
       showToast('↩ 오늘 할 일로 복구됨');
     }else{
       const restored={...todo};delete restored.completedAt;
-      sT([...todos,restored].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));
-      sA(archive.filter(x=>x.id!==todo.id||(x.completedAt!==todo.completedAt)));
+      if(src==='shared'){sShT([...shTodos,restored].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));sShA(shArchive.filter(x=>x.id!==todo.id||(x.completedAt!==todo.completedAt)))}
+      else{sT([...todos,restored].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));sA(archive.filter(x=>x.id!==todo.id||(x.completedAt!==todo.completedAt)))}
       showToast('↩ 할 일로 복구됨');
     }
   };
-  const openEdit=(todo,e,readOnly)=>{
+  const openEdit=(todo,e,readOnly,src)=>{
     if(e)e.stopPropagation();const d=new Date(todo.datetime);
     setEditTodo(todo);sET(todo.title);sED(toDS(d));
     sETi(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'));
     sETg(todo.tagId||'');sEMemo(todo.memo||'');sENotiOn(todo.notiOn!==false);
-    setViewOnly(!!readOnly);
+    setViewOnly(!!readOnly);setEditSource(src||'personal');
     if(todo.notiAt){
       sENotiBefore('custom');
       const nad=new Date(todo.notiAt);
@@ -404,23 +418,27 @@ function App(){
     const notiAt=(eNotiBefore==='custom'&&eNotiAtD&&eNotiAtT)?eNotiAtD+'T'+eNotiAtT:null;
     const oldKeys=notifiedRef.current.filter(k=>k.startsWith(editTodo.id+'_'));
     if(oldKeys.length>0){notifiedRef.current=notifiedRef.current.filter(k=>!k.startsWith(editTodo.id+'_'));sv(SK.noti,notifiedRef.current)}
-    sT(todos.map(t=>t.id===editTodo.id?{...t,title:eT.trim(),memo:eMemo.trim()||'',datetime:dt,tagId:eTg||null,notiOn:eNotiOn,notiBefore:eNotiBefore==='custom'?null:eNotiBefore,notiAt:notiAt}:t).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));
+    const upd=t=>t.id===editTodo.id?{...t,title:eT.trim(),memo:eMemo.trim()||'',datetime:dt,tagId:eTg||null,notiOn:eNotiOn,notiBefore:eNotiBefore==='custom'?null:eNotiBefore,notiAt:notiAt}:t;
+    if(editSource==='shared'){sShT(shTodos.map(upd).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
+    else{sT(todos.map(upd).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
     setEditTodo(null);showToast('✓ 수정 완료');
   };
   const delEdit=()=>{
     if(!editTodo||viewOnly)return;
     askConfirm('할 일 삭제','"'+editTodo.title+'"을(를) 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.',()=>{
-      sT(todos.filter(t=>t.id!==editTodo.id));setEditTodo(null);showToast('🗑 삭제됨');
+      if(editSource==='shared'){sShT(shTodos.filter(t=>t.id!==editTodo.id))}else{sT(todos.filter(t=>t.id!==editTodo.id))}
+      setEditTodo(null);showToast('🗑 삭제됨');
     });
   };
 
-  const addRecord=()=>{if(!rT.trim()||!rSD||!rED)return;sR([...records,{id:Date.now().toString(),title:rT.trim(),memo:rMemo.trim()||'',startDate:rSD,endDate:rED,tagId:rTg||null,createdAt:new Date().toISOString()}].sort((a,b)=>new Date(a.startDate)-new Date(b.startDate)));sRT('');sRSD('');sRED('');sRTg('');sRMemo('');setShowAdd(false)};
-  const openEditRec=(rec,e,readOnly)=>{if(e)e.stopPropagation();setEditRec(rec);sERT(rec.title);sERSD(rec.startDate);sERED(rec.endDate);sERTg(rec.tagId||'');sERMemo(rec.memo||'');setViewOnly(!!readOnly)};
-  const saveEditRec=()=>{if(!editRec||!erT.trim()||!erSD||!erED||viewOnly)return;sR(records.map(r=>r.id===editRec.id?{...r,title:erT.trim(),memo:erMemo.trim()||'',startDate:erSD,endDate:erED,tagId:erTg||null}:r).sort((a,b)=>new Date(a.startDate)-new Date(b.startDate)));setEditRec(null);showToast('✓ 수정 완료')};
+  const addRecord=()=>{if(!rT.trim()||!rSD||!rED)return;const item={id:Date.now().toString(),title:rT.trim(),memo:rMemo.trim()||'',startDate:rSD,endDate:rED,tagId:rTg||null,createdAt:new Date().toISOString()};if(writeMode==='shared'){sShR([...shRecords,item].sort((a,b)=>new Date(a.startDate)-new Date(b.startDate)))}else{sR([...records,item].sort((a,b)=>new Date(a.startDate)-new Date(b.startDate)))}sRT('');sRSD('');sRED('');sRTg('');sRMemo('');setShowAdd(false)};
+  const openEditRec=(rec,e,readOnly,src)=>{if(e)e.stopPropagation();setEditRec(rec);sERT(rec.title);sERSD(rec.startDate);sERED(rec.endDate);sERTg(rec.tagId||'');sERMemo(rec.memo||'');setViewOnly(!!readOnly);setEditSource(src||'personal')};
+  const saveEditRec=()=>{if(!editRec||!erT.trim()||!erSD||!erED||viewOnly)return;const upd=r=>r.id===editRec.id?{...r,title:erT.trim(),memo:erMemo.trim()||'',startDate:erSD,endDate:erED,tagId:erTg||null}:r;if(editSource==='shared'){sShR(shRecords.map(upd).sort((a,b)=>new Date(a.startDate)-new Date(b.startDate)))}else{sR(records.map(upd).sort((a,b)=>new Date(a.startDate)-new Date(b.startDate)))}setEditRec(null);showToast('✓ 수정 완료')};
   const delEditRec=()=>{
     if(!editRec||viewOnly)return;
     askConfirm('기록 삭제','"'+editRec.title+'"을(를) 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.',()=>{
-      sR(records.filter(r=>r.id!==editRec.id));setEditRec(null);showToast('🗑 삭제됨');
+      if(editSource==='shared'){sShR(shRecords.filter(r=>r.id!==editRec.id))}else{sR(records.filter(r=>r.id!==editRec.id))}
+      setEditRec(null);showToast('🗑 삭제됨');
     });
   };
 
@@ -480,7 +498,7 @@ function App(){
   },[]);
 
   const exportData=()=>{
-    const data={todos,archive,tags,records,dailyTasks,exportedAt:new Date().toISOString(),version:'4.2'};
+    const data={todos,archive,tags,records,dailyTasks,shTodos,shRecords,shDailyTasks,shArchive,exportedAt:new Date().toISOString(),version:'5.0'};
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
@@ -503,6 +521,10 @@ function App(){
           if(data.tags){sTg(data.tags)}
           if(data.records){sR(data.records)}
           if(data.dailyTasks){sDT(data.dailyTasks)}
+          if(data.shTodos){sShT(data.shTodos)}
+          if(data.shRecords){sShR(data.shRecords)}
+          if(data.shDailyTasks){sShDT(data.shDailyTasks)}
+          if(data.shArchive){sShA(data.shArchive)}
           showToast('✓ 데이터 복원 완료!');
         },'복원',C.accent);
       }catch(err){showToast('⚠ 파일을 읽을 수 없습니다')}
@@ -760,7 +782,9 @@ function App(){
           vm==='list'?CalI({z:17,c:C.text2}):LstI({z:17,c:C.accent})
         ):null
       ),
-      h('div',{style:{flex:1,textAlign:'center'}},h('div',{style:S.hDate},todayStr())),
+      h('div',{style:{flex:1,textAlign:'center',minWidth:0}},
+        isWide?h('div',{style:S.hDate},todayStr()):h('div',{style:{...S.hDate,lineHeight:'1.2'}},todayParts().date,h('br'),h('span',{style:{fontSize:12,fontWeight:500}},todayParts().day))
+      ),
       // ★ 오른쪽: 👤/👥 빠른 토글 + 정렬 + 검색
       h('button',{onClick:quickToggleShared,style:{...S.hBtn,borderColor:sharedViewOn?'#3B82F6':C.border,background:sharedViewOn?'#3B82F610':'transparent',minWidth:34}},
         h('span',{style:{fontSize:13}},sharedViewOn?'👥':'👤')
@@ -824,9 +848,10 @@ function App(){
   ):null;
 
   // ═══ EDIT TODO MODAL ═══
+  const srcBadge=editSource==='shared'?h('span',{style:{fontSize:10,fontWeight:700,color:'#FFF',background:'#3B82F6',padding:'2px 8px',borderRadius:10,marginLeft:8}},'📤 공유'):h('span',{style:{fontSize:10,fontWeight:700,color:'#FFF',background:C.accent,padding:'2px 8px',borderRadius:10,marginLeft:8}},'👤 개인');
   const editM=editTodo?h('div',{style:S.overlay,onClick:()=>{setEditTodo(null);setViewOnly(false)}},
     h('div',{style:S.modal,onClick:e=>e.stopPropagation()},
-      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},h('span',{style:{fontSize:15,fontWeight:600,color:C.text}},viewOnly?'할 일 보기':'할 일 수정'),h('button',{onClick:()=>{setEditTodo(null);setViewOnly(false)},style:S.closeBtn},'✕')),
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},h('div',{style:{display:'flex',alignItems:'center'}},h('span',{style:{fontSize:15,fontWeight:600,color:C.text}},viewOnly?'할 일 보기':'할 일 수정'),srcBadge),h('button',{onClick:()=>{setEditTodo(null);setViewOnly(false)},style:S.closeBtn},'✕')),
       h('input',{type:'text',value:eT,onChange:e=>sET(e.target.value),style:{...S.input,background:viewOnly?C.border2:C.bg},readOnly:viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEdit()}),
       h('div',{style:{display:'flex',gap:6}},h('input',{type:'date',value:eD,onChange:e=>sED(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly}),h('input',{type:'time',value:eTi,onChange:e=>sETi(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly})),
       h('select',{value:eTg,onChange:e=>sETg(e.target.value),style:S.input,disabled:viewOnly},h('option',{value:''},'태그 없음'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
@@ -841,7 +866,7 @@ function App(){
   // ═══ EDIT RECORD MODAL ═══
   const editRM=editRec?h('div',{style:S.overlay,onClick:()=>{setEditRec(null);setViewOnly(false)}},
     h('div',{style:S.modal,onClick:e=>e.stopPropagation()},
-      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},h('span',{style:{fontSize:15,fontWeight:600,color:C.text}},viewOnly?'기록 보기':'기록 수정'),h('button',{onClick:()=>{setEditRec(null);setViewOnly(false)},style:S.closeBtn},'✕')),
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},h('div',{style:{display:'flex',alignItems:'center'}},h('span',{style:{fontSize:15,fontWeight:600,color:C.text}},viewOnly?'기록 보기':'기록 수정'),srcBadge),h('button',{onClick:()=>{setEditRec(null);setViewOnly(false)},style:S.closeBtn},'✕')),
       h('input',{type:'text',value:erT,onChange:e=>sERT(e.target.value),style:{...S.input,background:viewOnly?C.border2:C.bg},readOnly:viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEditRec()}),
       h('div',{style:{display:'flex',gap:6,alignItems:'center'}},h('input',{type:'date',value:erSD,onChange:e=>sERSD(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly}),h('span',{style:{color:C.text3,fontSize:12,marginBottom:7}},'~'),h('input',{type:'date',value:erED,onChange:e=>sERED(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly})),
       h('select',{value:erTg,onChange:e=>sERTg(e.target.value),style:S.input,disabled:viewOnly},h('option',{value:''},'태그 없음'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
@@ -988,12 +1013,21 @@ function App(){
 
   // ═══ ADD FORM ═══
   const addF=showAdd?h('div',{style:S.addForm},
-    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
       h('div',{style:{display:'flex',gap:0,background:C.border2,borderRadius:7,padding:2}},
         h('button',{onClick:()=>setAddMode('todo'),style:{...S.segBtn,background:addMode==='todo'?C.card:'transparent',color:addMode==='todo'?C.text:C.text3}},'할 일'),
         h('button',{onClick:()=>setAddMode('record'),style:{...S.segBtn,background:addMode==='record'?C.card:'transparent',color:addMode==='record'?C.text:C.text3}},'기록')
       ),
       h('button',{onClick:()=>setShowAdd(false),style:S.closeBtn},'✕')
+    ),
+    // ★ 개인/공유 세그먼트
+    h('div',{style:{display:'flex',gap:0,background:C.border2,borderRadius:7,padding:2,marginBottom:10}},
+      h('button',{onClick:()=>setWriteMode('personal'),style:{...S.segBtn,flex:1,background:writeMode==='personal'?C.card:'transparent',color:writeMode==='personal'?C.accent:C.text3,gap:4,display:'flex',alignItems:'center',justifyContent:'center'}},
+        h('span',{style:{fontSize:12}},'👤'),h('span',null,'개인')
+      ),
+      h('button',{onClick:()=>setWriteMode('shared'),style:{...S.segBtn,flex:1,background:writeMode==='shared'?C.card:'transparent',color:writeMode==='shared'?'#3B82F6':C.text3,gap:4,display:'flex',alignItems:'center',justifyContent:'center'}},
+        h('span',{style:{fontSize:12}},'📤'),h('span',null,'공유')
+      )
     ),
     addMode==='todo'?h('div',null,
       h('input',{type:'text',placeholder:'할 일 입력',value:nT,onChange:e=>sNT(e.target.value),style:S.input,autoFocus:true,onKeyDown:e=>e.key==='Enter'&&addTodo()}),
@@ -1001,13 +1035,13 @@ function App(){
       h('select',{value:nTg,onChange:e=>sNTg(e.target.value),style:S.input},h('option',{value:''},'태그 선택'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
       notiRow(nNotiOn,sNNotiOn,nNotiBefore,sNNotiBefore,nNotiAtD,sNNotiAtD,nNotiAtT,sNNotiAtT),
       h('textarea',{placeholder:'메모 (선택)',value:nMemo,onChange:e=>sNMemo(e.target.value),rows:2,style:{...S.input,resize:'vertical',fontFamily:'inherit',minHeight:48}}),
-      h('button',{onClick:addTodo,style:S.submitBtn},'추가')
+      h('button',{onClick:addTodo,style:{...S.submitBtn,background:writeMode==='shared'?'#3B82F6':C.accent}},writeMode==='shared'?'📤 공유 추가':'추가')
     ):h('div',null,
       h('input',{type:'text',placeholder:'기록 제목 (예: 부모님 해외여행)',value:rT,onChange:e=>sRT(e.target.value),style:S.input,autoFocus:true,onKeyDown:e=>e.key==='Enter'&&addRecord()}),
       h('div',{style:{display:'flex',gap:6,alignItems:'center'}},h('input',{type:'date',value:rSD,onChange:e=>sRSD(e.target.value),style:{...S.input,flex:1}}),h('span',{style:{color:C.text3,fontSize:12,marginBottom:7}},'~'),h('input',{type:'date',value:rED,onChange:e=>sRED(e.target.value),style:{...S.input,flex:1}})),
       h('select',{value:rTg,onChange:e=>sRTg(e.target.value),style:S.input},h('option',{value:''},'태그 선택'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
       h('textarea',{placeholder:'메모 (선택)',value:rMemo,onChange:e=>sRMemo(e.target.value),rows:2,style:{...S.input,resize:'vertical',fontFamily:'inherit',minHeight:48}}),
-      h('button',{onClick:addRecord,style:S.submitBtn},'추가')
+      h('button',{onClick:addRecord,style:{...S.submitBtn,background:writeMode==='shared'?'#3B82F6':C.accent}},writeMode==='shared'?'📤 공유 추가':'추가')
     )
   ):null;
 
@@ -1191,7 +1225,7 @@ function App(){
       ),
       h('div',{style:S.setS},
         h('div',{style:S.setST},'데이터 현황'),
-        ...[['할 일',todos.length],['완료',archive.length],['진행 중 기록',activeRecords.length],['지난 기록',pastRecords.length],['오늘 할 일',todayDTTotal],['태그',tags.length]].map(([l,v])=>h('div',{key:l,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:12,color:C.text2,borderBottom:'1px solid '+C.border2}},h('span',null,l),h('span',{style:{background:C.accentBg,color:C.accent,fontSize:10,fontWeight:600,padding:'1px 7px',borderRadius:10}},v)))
+        ...[['👤 할 일',todos.length],['👤 완료',archive.length],['👤 기록',records.length],['👤 오늘 할 일',todayDTTotal],['📤 공유 할 일',shTodos.length],['📤 공유 완료',shArchive.length],['📤 공유 기록',shRecords.length],['태그',tags.length]].map(([l,v])=>h('div',{key:l,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:12,color:C.text2,borderBottom:'1px solid '+C.border2}},h('span',null,l),h('span',{style:{background:l.startsWith('📤')?'#3B82F610':C.accentBg,color:l.startsWith('📤')?'#3B82F6':C.accent,fontSize:10,fontWeight:600,padding:'1px 7px',borderRadius:10}},v)))
       )
     );
   }
