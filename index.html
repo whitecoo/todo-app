@@ -50,6 +50,8 @@ function fmt(s){const d=new Date(s);return{m:d.getMonth()+1,d:d.getDate(),w:DK[d
 function todayStr(){const n=new Date();return n.getFullYear()+'. '+String(n.getMonth()+1).padStart(2,'0')+'. '+String(n.getDate()).padStart(2,'0')+'. '+DK[n.getDay()]+'요일'}
 function toDS(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function daysBetween(a,b){return Math.ceil((b-a)/(864e5))+1}
+// ★ Parse date string as LOCAL time (not UTC) to fix timezone issues
+function localDate(s){return new Date(s+'T00:00:00')}
 function notiLabel(m){const o=NOTI_OPTS.find(x=>x.v===m);return o?o.l:'30분 전'}
 
 const C={bg:'#F5F0EA',card:'#FFFFFF',card2:'#FAF7F3',border:'#E8E2DA',border2:'#F0EBE4',text:'#2C2520',text2:'#8C7E72',text3:'#B8AEA2',accent:'#C8963E',accentBg:'#C8963E14',green:'#5A9E6F',greenBg:'#5A9E6F18',red:'#C45C5C'};
@@ -464,7 +466,7 @@ function App(){
     // Wrap items with a type marker and sortable date
     const items=[];
     todos.forEach(t=>items.push({type:'todo',data:t,sortDate:new Date(t.datetime),title:t.title}));
-    activeRecords.forEach(r=>items.push({type:'record',data:r,sortDate:new Date(r.startDate),title:r.title}));
+    activeRecords.forEach(r=>items.push({type:'record',data:r,sortDate:localDate(r.startDate),title:r.title}));
 
     if(sortMode==='date'){
       items.sort((a,b)=>a.sortDate-b.sortDate);
@@ -494,12 +496,12 @@ function App(){
   const tfd=useMemo(()=>{
     const mp={};todos.forEach(t=>{const d=new Date(t.datetime);if(d.getFullYear()===cm.y&&d.getMonth()===cm.m){const dy=d.getDate();if(!mp[dy])mp[dy]=[];mp[dy].push(t)}});return mp;
   },[todos,cm]);
-  const recForMonth=useMemo(()=>records.filter(r=>{const s=new Date(r.startDate),e=new Date(r.endDate),mS=new Date(cm.y,cm.m,1),mE=new Date(cm.y,cm.m+1,0);return s<=mE&&e>=mS}),[records,cm]);
+  const recForMonth=useMemo(()=>records.filter(r=>{const s=localDate(r.startDate),e=localDate(r.endDate),mS=new Date(cm.y,cm.m,1),mE=new Date(cm.y,cm.m+1,0);return s<=mE&&e>=mS}),[records,cm]);
   const recBars=useMemo(()=>{
     const bars=[];
     recForMonth.forEach(rec=>{
       const tg=gT(rec.tagId);const color=tg?tg.color:'#8B6CC1';
-      const rs=new Date(rec.startDate),re=new Date(rec.endDate);
+      const rs=localDate(rec.startDate),re=localDate(rec.endDate);
       weeks.forEach((week,wi)=>{
         const weekDays=week.map((d,ci)=>d?new Date(cm.y,cm.m,d):null);
         let sc=-1,ec=-1;
@@ -637,7 +639,7 @@ function App(){
       ),
       sRc.length>0?h('div',{style:{padding:'4px 16px 8px'}},
         h('div',{style:{display:'flex',alignItems:'center',gap:5,marginBottom:4}},h('span',{style:{width:6,height:6,borderRadius:'50%',background:'#8B6CC1'}}),h('span',{style:{fontSize:10,fontWeight:600,color:C.text3,flex:1}},'기록'),h('span',{style:{fontSize:9,color:C.text3,background:C.card,padding:'1px 5px',borderRadius:6}},sRc.length)),
-        sRc.map(r=>{const sd=new Date(r.startDate),ed=new Date(r.endDate);return h('div',{key:r.id,style:{display:'flex',alignItems:'center',padding:'4px 0',borderBottom:'1px solid '+C.border2,gap:6}},h('span',{style:{fontSize:10,color:C.text3,minWidth:72}},(sd.getMonth()+1)+'/'+sd.getDate()+'~'+(ed.getMonth()+1)+'/'+ed.getDate()),h('span',{style:{fontSize:12,color:C.text,flex:1}},hl(r.title,sq)))})
+        sRc.map(r=>{const sd=localDate(r.startDate),ed=localDate(r.endDate);return h('div',{key:r.id,style:{display:'flex',alignItems:'center',padding:'4px 0',borderBottom:'1px solid '+C.border2,gap:6}},h('span',{style:{fontSize:10,color:C.text3,minWidth:72}},(sd.getMonth()+1)+'/'+sd.getDate()+'~'+(ed.getMonth()+1)+'/'+ed.getDate()),h('span',{style:{fontSize:12,color:C.text,flex:1}},hl(r.title,sq)))})
       ):null,
       h('div',{style:{padding:'4px 16px 8px'}},
         h('div',{style:{display:'flex',alignItems:'center',gap:5,marginBottom:4}},h('span',{style:{width:6,height:6,borderRadius:'50%',background:C.green}}),h('span',{style:{fontSize:10,fontWeight:600,color:C.text3,flex:1}},'완료'),h('span',{style:{fontSize:9,color:C.text3,background:C.card,padding:'1px 5px',borderRadius:6}},sAr.length)),
@@ -673,7 +675,7 @@ function App(){
 
   // ═══ CALENDAR VIEW ═══
   const CW=100/7;
-  const recForDay=useMemo(()=>{const mp={};recForMonth.forEach(r=>{const s=new Date(r.startDate),e=new Date(r.endDate),mS=new Date(cm.y,cm.m,1),mE=new Date(cm.y,cm.m+1,0);const f=s<mS?1:s.getDate(),t=e>mE?mE.getDate():e.getDate();for(let d=f;d<=t;d++){if(!mp[d])mp[d]=[];mp[d].push(r)}});return mp},[recForMonth,cm]);
+  const recForDay=useMemo(()=>{const mp={};recForMonth.forEach(r=>{const s=localDate(r.startDate),e=localDate(r.endDate),mS=new Date(cm.y,cm.m,1),mE=new Date(cm.y,cm.m+1,0);const f=s<mS?1:s.getDate(),t=e>mE?mE.getDate():e.getDate();for(let d=f;d<=t;d++){if(!mp[d])mp[d]=[];mp[d].push(r)}});return mp},[recForMonth,cm]);
   const calView=h('div',{style:{padding:'0 6px',overflowY:'auto',WebkitOverflowScrolling:'touch',flex:1}},
     h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 4px 6px',position:'sticky',top:0,background:C.bg,zIndex:3}},
       h('button',{onClick:pM,style:S.cNav},CL({z:15,c:C.text2})),
@@ -693,15 +695,11 @@ function App(){
         ...week.map((day,ci)=>{
           if(!day)return h('div',{key:'e'+ci,style:{minHeight:36+barAreaH,padding:2,borderBottom:'1px solid '+C.border2+'60'}});
           const it=isT(day);const dw=new Date(cm.y,cm.m,day).getDay();
-          // ★ Records for this day (displayed first)
-          const dayRecs=(recForDay[day]||[]);
           // ★ Todos for this day sorted by time
           const dayTodos=(tfd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
           return h('div',{key:day,style:{minHeight:36+barAreaH,padding:'2px 1px',borderRadius:4,background:it?C.accent+'0C':'transparent',border:it?'1px solid '+C.accent+'35':'1px solid transparent',borderBottom:'1px solid '+C.border2+'60'}},
             h('div',{style:{fontSize:10,fontWeight:it?700:400,color:it?C.accent:dw===0?C.red:dw===6?'#3B82F6':C.text2,textAlign:'center',marginBottom:barAreaH>0?barAreaH-2:1}},day),
-            // Records for this day (as small colored indicators)
-            ...dayRecs.map(r=>{const tg=gT(r.tagId);const cl=tg?tg.color:'#8B6CC1';return h('div',{key:'rd'+r.id+day,onClick:e=>openEditRec(r,e),style:{fontSize:6,lineHeight:'8px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:cl+'20',borderLeft:'2px solid '+cl,color:cl,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}},r.title)}),
-            // Todos sorted by time
+            // Todos sorted by time (records are shown as bars above, no duplication)
             ...dayTodos.map(t=>{const tg=gT(t.tagId);const f=fmt(t.datetime);return h('div',{key:'ct'+t.id,onClick:e=>openEdit(t,e),style:{fontSize:6,lineHeight:'8px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:tg?tg.color+'15':C.border2,color:tg?tg.color:C.text2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',display:'flex',gap:1}},h('span',{style:{color:C.text3,fontSize:6,flexShrink:0}},f.t),h('span',null,t.title))})
           )
         }),
@@ -721,7 +719,7 @@ function App(){
   // ═══ LIST ITEMS ═══
   const recEl=rec=>{
     const tg=gT(rec.tagId);const color=tg?tg.color:'#8B6CC1';
-    const sd=new Date(rec.startDate),ed=new Date(rec.endDate),days=daysBetween(sd,ed);
+    const sd=localDate(rec.startDate),ed=localDate(rec.endDate),days=daysBetween(sd,ed);
     const now=new Date(),elapsed=Math.ceil((now-sd)/864e5),pct=Math.min(Math.max(elapsed/days*100,0),100);
     return h('div',{key:'r_'+rec.id,onClick:e=>openEditRec(rec,e),style:{display:'flex',alignItems:'center',padding:'8px 14px',borderBottom:'1px solid '+C.border2,cursor:'pointer',gap:8}},
       h('div',{style:{width:3,height:28,borderRadius:2,background:color,flexShrink:0}}),
@@ -782,7 +780,7 @@ function App(){
   // ★ Past record item (in archive tab)
   const pastRecEl=rec=>{
     const tg=gT(rec.tagId);const color=tg?tg.color:'#8B6CC1';
-    const sd=new Date(rec.startDate),ed=new Date(rec.endDate);
+    const sd=localDate(rec.startDate),ed=localDate(rec.endDate);
     return h('div',{key:'pr_'+rec.id,onClick:e=>openEditRec(rec,e),style:{display:'flex',alignItems:'center',padding:'7px 14px',borderBottom:'1px solid '+C.border2,opacity:.5,cursor:'pointer',gap:8}},
       h('div',{style:{width:3,height:20,borderRadius:2,background:color,flexShrink:0}}),
       h('div',{style:{flex:1,minWidth:0}},
@@ -1069,10 +1067,27 @@ let swRegistration = null;
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
+    // Force SW update check (bypass browser cache of sw.js)
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
       .then(reg => {
         swRegistration = reg;
         console.log('SW registered');
+        // Force check for updates
+        reg.update();
+        // If there's a waiting SW, force it to activate
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+        reg.addEventListener('updatefound', () => {
+          const newSW = reg.installing;
+          if (newSW) {
+            newSW.addEventListener('statechange', () => {
+              if (newSW.state === 'activated') {
+                console.log('New SW activated');
+              }
+            });
+          }
+        });
       })
       .catch(err => console.log('SW registration failed:', err));
   });

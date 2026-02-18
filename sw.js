@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todo-pwa-v2';
+const CACHE_NAME = 'todo-pwa-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -25,10 +25,20 @@ self.addEventListener('activate', e => {
   );
 });
 
-// ═══ FETCH: Serve from cache, fallback to network ═══
+// ═══ FETCH: Network first, fallback to cache ═══
 self.addEventListener('fetch', e => {
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    fetch(e.request).then(response => {
+      // Update cache with fresh copy
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+      }
+      return response;
+    }).catch(() => {
+      // Network failed → use cache (offline mode)
+      return caches.match(e.request);
+    })
   );
 });
 
@@ -38,6 +48,9 @@ let checkInterval = null;
 
 // Receive notification schedules from main app
 self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
   if (e.data && e.data.type === 'SYNC_NOTIFICATIONS') {
     scheduledNotifications = e.data.notifications || [];
     // Start checking if not already
