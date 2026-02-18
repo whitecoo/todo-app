@@ -715,15 +715,15 @@ function App(){
       const barSlots=[];
       weekBars.forEach(bar=>{let slot=0;while(barSlots[slot]&&barSlots[slot].some(b=>!(bar.endCol<b.startCol||bar.startCol>b.endCol))){slot++}if(!barSlots[slot])barSlots[slot]=[];barSlots[slot].push(bar)});
       const bc=barSlots.length;
-      const barAreaH=bc>0?18+bc*11:0;
+      const barGap=bc>0?bc*11+5:0;
       return h('div',{key:'w'+wi,style:{position:'relative',display:'grid',gridTemplateColumns:'repeat(7,1fr)'}},
         ...week.map((day,ci)=>{
-          if(!day)return h('div',{key:'e'+ci,style:{minHeight:36+barAreaH,padding:2,borderBottom:'1px solid '+C.border2+'60'}});
+          if(!day)return h('div',{key:'e'+ci,style:{minHeight:22+barGap,padding:2,borderBottom:'1px solid '+C.border2+'60'}});
           const it=isT(day);const dw=new Date(cm.y,cm.m,day).getDay();
           // ★ Todos for this day sorted by time
           const dayTodos=(tfd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
-          return h('div',{key:day,style:{minHeight:36+barAreaH,padding:'2px 1px',borderRadius:4,background:it?C.accent+'0C':'transparent',border:it?'1px solid '+C.accent+'35':'1px solid transparent',borderBottom:'1px solid '+C.border2+'60'}},
-            h('div',{style:{fontSize:10,fontWeight:it?700:400,color:it?C.accent:dw===0?C.red:dw===6?'#3B82F6':C.text2,textAlign:'center',marginBottom:barAreaH>0?barAreaH-2:1}},day),
+          return h('div',{key:day,style:{minHeight:22+barGap,padding:'2px 1px',borderRadius:4,background:it?C.accent+'0C':'transparent',border:it?'1px solid '+C.accent+'35':'1px solid transparent',borderBottom:'1px solid '+C.border2+'60'}},
+            h('div',{style:{fontSize:10,fontWeight:it?700:400,color:it?C.accent:dw===0?C.red:dw===6?'#3B82F6':C.text2,textAlign:'center',marginBottom:barGap||1}},day),
             // Todos sorted by time (records are shown as bars above, no duplication)
             ...dayTodos.map(t=>{const tg=gT(t.tagId);const f=fmt(t.datetime);return h('div',{key:'ct'+t.id,onClick:e=>openEdit(t,e),style:{fontSize:6,lineHeight:'8px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:tg?tg.color+'15':C.border2,color:tg?tg.color:C.text2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',display:'flex',gap:1}},h('span',{style:{color:C.text3,fontSize:6,flexShrink:0}},f.t),h('span',null,t.title))})
           )
@@ -788,22 +788,22 @@ function App(){
     const tg=gT(todo.tagId);
     const isDaily=todo.isDailyTask;
     const cdStr=cd?(cd.getFullYear()+'년 '+(cd.getMonth()+1)+'월 '+cd.getDate()+'일 '+String(cd.getHours()).padStart(2,'0')+'시 '+String(cd.getMinutes()).padStart(2,'0')+'분'):'';
-    return h('div',{key:todo.id+(todo.completedAt||''),style:{display:'flex',alignItems:'center',padding:'7px 14px',borderBottom:'1px solid '+C.border2,opacity:.6}},
+    return h('div',{key:todo.id+(todo.completedAt||''),style:{display:'flex',alignItems:'center',padding:'7px 14px',borderBottom:'1px solid '+C.border2,opacity:.85}},
       h('div',{style:{flex:1,minWidth:0}},
         isDaily?h('div',{style:{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}},
           h('span',{style:{fontSize:9,fontWeight:700,color:'#FFF',background:'#E8A838',padding:'1px 5px',borderRadius:4,flexShrink:0}},'오늘의 할일'),
-          h('span',{style:{fontSize:13,color:C.text2,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},todo.title),
-          cd?h('span',{style:{fontSize:8,color:C.text3,flexShrink:0}},cdStr):null
+          h('span',{style:{fontSize:13,color:C.text,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},todo.title),
+          cd?h('span',{style:{fontSize:9,color:'#8C7E72',flexShrink:0,fontWeight:500}},cdStr):null
         ):h('div',{style:{display:'flex',alignItems:'center',gap:5}},
           h('span',{style:{fontSize:10,fontWeight:600,color:C.accent,minWidth:30}},f.m+'/'+f.d),
-          h('span',{style:{fontSize:9,color:C.text3}},'('+f.w+')'),
-          h('span',{style:{fontSize:10,color:C.text3,marginRight:3}},f.t),
-          h('span',{style:{fontSize:13,color:C.text2,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},todo.title),
+          h('span',{style:{fontSize:9,color:'#7A6E62'}},'('+f.w+')'),
+          h('span',{style:{fontSize:10,color:'#7A6E62',marginRight:3}},f.t),
+          h('span',{style:{fontSize:13,color:C.text,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},todo.title),
           tg?h('span',{style:{...S.tSm,background:tg.color+'12',color:tg.color,borderColor:tg.color+'25',flexShrink:0,marginLeft:3}},tg.name):null
         )
       ),
       h('div',{style:{display:'flex',alignItems:'center',gap:4,flexShrink:0}},
-        !isDaily&&cd?h('span',{style:{fontSize:8,color:C.text3}},(cd.getMonth()+1)+'/'+cd.getDate()):null,
+        !isDaily&&cd?h('span',{style:{fontSize:9,color:'#7A6E62'}},(cd.getMonth()+1)+'/'+cd.getDate()):null,
         h('button',{onClick:e=>{e.stopPropagation();restoreTodo(todo)},title:'복구',style:{width:26,height:26,borderRadius:'50%',background:C.accent+'12',border:'1px solid '+C.accent+'30',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',marginLeft:2}},UndoI({z:12,c:C.accent})),
         h('div',{style:{width:16,height:16,borderRadius:'50%',background:C.greenBg,color:C.green,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}},'✓')
       )
@@ -1050,19 +1050,23 @@ function App(){
     )
   );
 
-  // ★ Wide layout for Fold5
+  // ★ Wide layout for Fold5 - fill left column first
   if(isWide&&tab==='current'&&vm==='list'){
+    const half=Math.ceil(unifiedList.length/2);
+    const leftItems=unifiedList.slice(0,half);
+    const rightItems=unifiedList.slice(half);
     return h('div',{style:{...S.root,maxWidth:780}},
       header,searchP,yesterdayPrompt,
       h('div',{style:{padding:'0 6px'}},dtSection),
-      h('div',{style:{...S.content}},
-        !unifiedList.length&&!showAdd&&todayDTTotal===0?h('div',{style:S.empty},h('div',{style:{fontSize:32,marginBottom:8}},'✓'),h('div',{style:{fontSize:13,color:C.text2}},'할 일이 없습니다'),h('div',{style:{fontSize:11,marginTop:4,color:C.text3}},'+ 버튼으로 추가')):null,
-        unifiedList.length>0?h('div',{style:{columnCount:2,columnGap:0,columnRule:'1px solid '+C.border}},
-          ...unifiedList.map(item=>h('div',{key:(item.type==='todo'?'t_':'r_')+item.data.id,style:{breakInside:'avoid',WebkitColumnBreakInside:'avoid'}},
-            item.type==='todo'?todoEl(item.data):recEl(item.data)
-          ))
-        ):null,
-        addF
+      h('div',{style:{...S.content,display:'flex',gap:0}},
+        h('div',{style:{flex:1,borderRight:'1px solid '+C.border,overflowY:'auto'}},
+          leftItems.length===0&&!showAdd&&todayDTTotal===0?h('div',{style:{...S.empty,height:'30vh'}},h('div',{style:{fontSize:24,marginBottom:6}},'✓'),h('div',{style:{fontSize:12,color:C.text2}},'항목 없음')):null,
+          ...leftItems.map(renderUnifiedItem),
+          addF
+        ),
+        h('div',{style:{flex:1,overflowY:'auto'}},
+          ...rightItems.map(renderUnifiedItem)
+        )
       ),
       fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,nav
     );
