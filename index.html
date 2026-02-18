@@ -75,6 +75,7 @@ function DlI(p){return h('svg',{width:p.z||14,height:p.z||14,viewBox:'0 0 24 24'
 function UlI(p){return h('svg',{width:p.z||14,height:p.z||14,viewBox:'0 0 24 24',fill:'none',stroke:p.c||C.text3,strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},h('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),h('polyline',{points:'17 8 12 3 7 8'}),h('line',{x1:12,y1:3,x2:12,y2:15}))}
 // ★ NEW: Sort icon
 function SortI(p){return h('svg',{width:p.z||17,height:p.z||17,viewBox:'0 0 24 24',fill:'none',stroke:p.c||C.text3,strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},h('line',{x1:4,y1:6,x2:13,y2:6}),h('line',{x1:4,y1:12,x2:10,y2:12}),h('line',{x1:4,y1:18,x2:7,y2:18}),h('polyline',{points:'18 9 21 6 18 3'}),h('line',{x1:21,y1:6,x2:21,y2:21}))}
+function SharePI(p){return h('svg',{width:p.z||15,height:p.z||15,viewBox:'0 0 24 24',fill:p.fill||'none',stroke:p.c||C.text3,strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},h('path',{d:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'}),h('circle',{cx:12,cy:7,r:4}))}
 function MenuI(p){return h('svg',{width:p.z||18,height:p.z||18,viewBox:'0 0 24 24',fill:'none',stroke:p.c||C.text2,strokeWidth:2,strokeLinecap:'round'},h('line',{x1:3,y1:6,x2:21,y2:6}),h('line',{x1:3,y1:12,x2:21,y2:12}),h('line',{x1:3,y1:18,x2:21,y2:18}))}
 
 function App(){
@@ -127,6 +128,7 @@ function App(){
   // ★ Daily tasks (오늘 할 일)
   const[dailyTasks,setDailyTasks]=useState(()=>ld(SK.dt,[]));
   const[dtInput,setDtInput]=useState('');
+  const[dtShareMode,setDtShareMode]=useState(false);
   const[showDtSection,setShowDtSection]=useState(true);
   const[showYesterdayPrompt,setShowYesterdayPrompt]=useState(false);
   const[yesterdayItems,setYesterdayItems]=useState([]);
@@ -197,6 +199,7 @@ function App(){
   const[rcvTodosLive,setRcvTodosLive]=useState([]);
   const[rcvRecordsLive,setRcvRecordsLive]=useState([]);
   const[rcvArchiveLive,setRcvArchiveLive]=useState([]);
+  const[rcvDTLive,setRcvDTLive]=useState([]);
   const[partnerProfile,setPartnerProfile]=useState(null);
   const fbRef=useRef(null);
   const fbWriteTimer=useRef(null);
@@ -239,17 +242,18 @@ function App(){
   // READ: Listen to partner's data FROM Firebase
   useEffect(()=>{
     if(!fbConnected||!partnerCode||!fbRef.current){
-      setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setPartnerProfile(null);return;
+      setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setRcvDTLive([]);setPartnerProfile(null);return;
     }
     const ref=fbRef.current.ref('shares/'+partnerCode);
     const handler=ref.on('value',snap=>{
       const data=snap.val();
-      if(!data){setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setPartnerProfile(null);return}
+      if(!data){setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setRcvDTLive([]);setPartnerProfile(null);return}
       const owner=data.profile?.name||'상대방';
       setPartnerProfile(data.profile||null);
       setRcvTodosLive((data.todos||[]).map(t=>({...t,_owner:owner})));
       setRcvRecordsLive((data.records||[]).map(r=>({...r,_owner:owner})));
       setRcvArchiveLive((data.archive||[]).map(a=>({...a,_owner:owner})));
+      setRcvDTLive((data.dailyTasks||[]).map(d=>({...d,_owner:owner})));
     });
     return()=>ref.off('value',handler);
   },[fbConnected,partnerCode]);
@@ -659,23 +663,32 @@ function App(){
   // ═══ DAILY TASKS (오늘 할 일) ═══
   const sDT=useCallback(dt=>{setDailyTasks(dt);sv(SK.dt,dt)},[]);
   const todayDT=dailyTasks.filter(d=>d.date===todayDS);
-  const todayDTTotal=todayDT.length;
+  const shDTToday=shDailyTasks.filter(d=>d.date===todayDS);
+  const rcvDTToday=rcvDTLive.filter(d=>d.date===todayDS);
+  const todayDTTotal=todayDT.length+shDTToday.length+rcvDTToday.length;
 
   const addDailyTask=()=>{
     if(!dtInput.trim())return;
-    sDT([...dailyTasks,{id:Date.now().toString(),title:dtInput.trim(),done:false,date:todayDS}]);
+    const item={id:Date.now().toString(),title:dtInput.trim(),done:false,date:todayDS};
+    if(dtShareMode){sShDT([...shDailyTasks,item])}else{sDT([...dailyTasks,item])}
     setDtInput('');
   };
-  const completeDailyTask=id=>{
-    const item=dailyTasks.find(d=>d.id===id);
-    if(!item)return;
-    // Add to archive with [오늘의 할일] marker
-    sA([{id:'dt_'+item.id,title:item.title,datetime:new Date().toISOString(),completedAt:new Date().toISOString(),isDailyTask:true,tagId:null},...archive]);
-    // Remove from daily tasks
-    sDT(dailyTasks.filter(d=>d.id!==id));
+  const completeDailyTask=(id,src)=>{
+    if(src==='shared'){
+      const item=shDailyTasks.find(d=>d.id===id);if(!item)return;
+      sShA([{id:'dt_'+item.id,title:item.title,datetime:new Date().toISOString(),completedAt:new Date().toISOString(),isDailyTask:true,tagId:null},...shArchive]);
+      sShDT(shDailyTasks.filter(d=>d.id!==id));
+    }else{
+      const item=dailyTasks.find(d=>d.id===id);if(!item)return;
+      sA([{id:'dt_'+item.id,title:item.title,datetime:new Date().toISOString(),completedAt:new Date().toISOString(),isDailyTask:true,tagId:null},...archive]);
+      sDT(dailyTasks.filter(d=>d.id!==id));
+    }
     showToast('✓ 완료 → 과거 탭으로 이동');
   };
-  const delDailyTask=id=>sDT(dailyTasks.filter(d=>d.id!==id));
+  const delDailyTask=(id,src)=>{
+    if(src==='shared'){sShDT(shDailyTasks.filter(d=>d.id!==id))}
+    else{sDT(dailyTasks.filter(d=>d.id!==id))}
+  };
   const moveToTomorrow=(items)=>{
     const tmrw=new Date(td);tmrw.setDate(tmrw.getDate()+1);const tmrwDS=toDS(tmrw);
     sDT(dailyTasks.map(d=>items.find(i=>i.id===d.id)?{...d,date:tmrwDS,done:false}:d));
@@ -1425,16 +1438,30 @@ function App(){
       h('span',{style:{fontSize:10,color:C.text3,transform:showDtSection?'rotate(90deg)':'rotate(0)',transition:'transform 0.2s'}},'▶')
     ),
     showDtSection?h('div',{style:{padding:'6px 12px 8px'}},
-      // ① Add input (항상 맨 위)
+      // ① Add input + 공유 토글
       h('div',{style:{display:'flex',gap:4,marginBottom:6}},
-        h('input',{type:'text',placeholder:'오늘 할 일 추가...',value:dtInput,onChange:e=>setDtInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addDailyTask(),style:{flex:1,padding:'7px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
-        h('button',{onClick:addDailyTask,style:{padding:'7px 12px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
+        h('input',{type:'text',placeholder:dtShareMode?'📤 공유 오늘 할 일 추가...':'오늘 할 일 추가...',value:dtInput,onChange:e=>setDtInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addDailyTask(),style:{flex:1,padding:'7px 10px',background:dtShareMode?'#3B82F608':C.bg,border:'1px solid '+(dtShareMode?'#3B82F640':C.border),borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
+        h('button',{onClick:addDailyTask,style:{padding:'7px 12px',background:dtShareMode?'#3B82F6':C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+'),
+        h('button',{onClick:()=>setDtShareMode(!dtShareMode),title:dtShareMode?'공유 모드 ON':'공유 모드 OFF',style:{padding:'7px 8px',background:dtShareMode?'#3B82F6':'transparent',border:'1px solid '+(dtShareMode?'#3B82F6':C.border),borderRadius:6,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}},SharePI({z:15,c:dtShareMode?'#FFF':C.text3}))
       ),
-      // ② Today's task list
+      // ② 개인 오늘할일
       ...todayDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:'1px solid '+C.border2}},
         h('button',{onClick:()=>completeDailyTask(dt.id),style:{width:18,height:18,borderRadius:4,border:'2px solid '+C.border,background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}},null),
         h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
         h('button',{onClick:()=>delDailyTask(dt.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕')
+      )),
+      // ③ 📤 공유 오늘할일
+      ...shDTToday.map(dt=>h('div',{key:'sh_'+dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:'1px solid '+C.border2,background:'#3B82F606'}},
+        h('button',{onClick:()=>completeDailyTask(dt.id,'shared'),style:{width:18,height:18,borderRadius:4,border:'2px solid #3B82F650',background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}},null),
+        h('span',{style:{fontSize:9,color:'#3B82F6',fontWeight:700,flexShrink:0}},'📤'),
+        h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
+        h('button',{onClick:()=>delDailyTask(dt.id,'shared'),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕')
+      )),
+      // ④ 📥 받은 오늘할일 (읽기전용)
+      ...rcvDTToday.map(dt=>h('div',{key:'rcv_'+dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:'1px solid '+C.border2,borderLeft:'3px solid '+rvColor+'30'}},
+        h('span',{style:{fontSize:9,color:rvColor,fontWeight:700,flexShrink:0}},'📥'),
+        h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
+        dt._owner?h('span',{style:{fontSize:9,color:rvColor,fontWeight:500,flexShrink:0}},dt._owner):null
       )),
       // Move to tomorrow button
       todayDT.length>0?h('button',{onClick:()=>{moveToTomorrow(todayDT)},
@@ -1768,7 +1795,7 @@ function App(){
       ),
       h('div',{style:S.setS},
         h('div',{style:S.setST},'데이터 현황'),
-        ...[['👤 할 일',todos.length],['👤 완료',archive.length],['👤 기록',records.length],['👤 오늘 할 일',todayDTTotal],['📤 공유 할 일',shTodos.length],['📤 공유 완료',shArchive.length],['📤 공유 기록',shRecords.length],['📥 공유받은 할 일',rcvTodos.length],['📥 공유받은 기록',rcvRecords.length],['🔁 반복 일정',[...todos,...shTodos].filter(t=>t.repeatType).length],['태그',tags.length]].map(([l,v])=>h('div',{key:l,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:12,color:C.text2,borderBottom:'1px solid '+C.border2}},h('span',null,l),h('span',{style:{background:l.startsWith('📥')?rvColor+'10':l.startsWith('📤')?'#3B82F610':C.accentBg,color:l.startsWith('📥')?rvColor:l.startsWith('📤')?'#3B82F6':C.accent,fontSize:10,fontWeight:600,padding:'1px 7px',borderRadius:10}},v))),
+        ...[['👤 할 일',todos.length],['👤 완료',archive.length],['👤 기록',records.length],['👤 오늘 할 일',todayDT.length],['📤 공유 할 일',shTodos.length],['📤 공유 완료',shArchive.length],['📤 공유 기록',shRecords.length],['📤 공유 오늘 할 일',shDTToday.length],['📥 공유받은 할 일',rcvTodos.length],['📥 공유받은 기록',rcvRecords.length],['📥 공유받은 오늘 할 일',rcvDTToday.length],['🔁 반복 일정',[...todos,...shTodos].filter(t=>t.repeatType).length],['태그',tags.length]].map(([l,v])=>h('div',{key:l,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:12,color:C.text2,borderBottom:'1px solid '+C.border2}},h('span',null,l),h('span',{style:{background:l.startsWith('📥')?rvColor+'10':l.startsWith('📤')?'#3B82F610':C.accentBg,color:l.startsWith('📥')?rvColor:l.startsWith('📤')?'#3B82F6':C.accent,fontSize:10,fontWeight:600,padding:'1px 7px',borderRadius:10}},v))),
         h('button',{onClick:()=>{
           askConfirm('전체 데이터 삭제','모든 할 일, 기록, 완료 내역, 태그를\n삭제하시겠습니까?\n\n⚠ 이 작업은 되돌릴 수 없습니다.\n먼저 백업을 권장합니다.',()=>{
             sT([]);sA([]);sR([]);sTg(DTAGS);sDT([]);sShT([]);sShR([]);sShA([]);sShDT([]);showToast('🗑 전체 데이터 삭제됨');
@@ -1807,19 +1834,31 @@ function App(){
         h('span',{style:{fontSize:10,color:C.text3,transform:showDtSection?'rotate(90deg)':'rotate(0)',transition:'transform 0.2s'}},'▶')
       ),
       showDtSection?h('div',{style:{padding:'6px 14px 8px'}},
-        // ① Add input (항상 맨 위)
+        // ① Add input + 공유 토글
         h('div',{style:{display:'flex',gap:4,marginBottom:6}},
-          h('input',{type:'text',placeholder:'오늘 할 일 추가...',value:dtInput,onChange:e=>setDtInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addDailyTask(),style:{flex:1,padding:'7px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
-          h('button',{onClick:addDailyTask,style:{padding:'7px 12px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
+          h('input',{type:'text',placeholder:dtShareMode?'📤 공유 오늘 할 일 추가...':'오늘 할 일 추가...',value:dtInput,onChange:e=>setDtInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addDailyTask(),style:{flex:1,padding:'7px 10px',background:dtShareMode?'#3B82F608':C.bg,border:'1px solid '+(dtShareMode?'#3B82F640':C.border),borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
+          h('button',{onClick:addDailyTask,style:{padding:'7px 12px',background:dtShareMode?'#3B82F6':C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+'),
+          h('button',{onClick:()=>setDtShareMode(!dtShareMode),title:dtShareMode?'공유 모드 ON':'공유 모드 OFF',style:{padding:'7px 8px',background:dtShareMode?'#3B82F6':'transparent',border:'1px solid '+(dtShareMode?'#3B82F6':C.border),borderRadius:6,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}},SharePI({z:15,c:dtShareMode?'#FFF':C.text3}))
         ),
         // ② Today tasks + Tomorrow in flex row
         h('div',{style:{display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}},
-          // Left: today tasks
+          // Left: today tasks (개인 + 📤공유 + 📥받은)
           h('div',{style:{flex:1,minWidth:200}},
             ...todayDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderBottom:'1px solid '+C.border2}},
               h('button',{onClick:()=>completeDailyTask(dt.id),style:{width:18,height:18,borderRadius:4,border:'2px solid '+C.border,background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}},null),
               h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
               h('button',{onClick:()=>delDailyTask(dt.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕')
+            )),
+            ...shDTToday.map(dt=>h('div',{key:'sh_'+dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderBottom:'1px solid '+C.border2,background:'#3B82F606'}},
+              h('button',{onClick:()=>completeDailyTask(dt.id,'shared'),style:{width:18,height:18,borderRadius:4,border:'2px solid #3B82F650',background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}},null),
+              h('span',{style:{fontSize:9,color:'#3B82F6',fontWeight:700,flexShrink:0}},'📤'),
+              h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
+              h('button',{onClick:()=>delDailyTask(dt.id,'shared'),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕')
+            )),
+            ...rcvDTToday.map(dt=>h('div',{key:'rcv_'+dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderBottom:'1px solid '+C.border2,borderLeft:'3px solid '+rvColor+'30'}},
+              h('span',{style:{fontSize:9,color:rvColor,fontWeight:700,flexShrink:0}},'📥'),
+              h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
+              dt._owner?h('span',{style:{fontSize:9,color:rvColor,fontWeight:500,flexShrink:0}},dt._owner):null
             )),
             todayDT.length>0?h('button',{onClick:()=>{moveToTomorrow(todayDT)},style:{width:'100%',padding:'5px',marginTop:3,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기'):null
           ),
