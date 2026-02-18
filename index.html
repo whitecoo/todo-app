@@ -375,6 +375,7 @@ function App(){
   };
 
   // ═══ DAILY TASKS (오늘 할 일) ═══
+  const td=new Date();
   const sDT=useCallback(dt=>{setDailyTasks(dt);sv(SK.dt,dt)},[]);
   const todayDS=toDS(td);
   const todayDT=dailyTasks.filter(d=>d.date===todayDS);
@@ -454,7 +455,6 @@ function App(){
   const hl=(t,q)=>{if(!q.trim())return t;const i=t.toLowerCase().indexOf(q.toLowerCase());if(i===-1)return t;return h('span',null,t.slice(0,i),h('span',{style:{color:C.accent,fontWeight:700}},t.slice(i,i+q.length)),t.slice(i+q.length))};
 
   // ═══ TODAY & ACTIVE/PAST RECORDS ═══
-  const td=new Date();
   const todayStart=new Date(td.getFullYear(),td.getMonth(),td.getDate());
   const activeRecords=records.filter(r=>new Date(r.endDate+'T23:59:59')>=todayStart);
   const pastRecords=records.filter(r=>new Date(r.endDate+'T23:59:59')<todayStart);
