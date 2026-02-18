@@ -1241,7 +1241,7 @@ function App(){
       h('button',{onClick:nM,style:S.cNav},CR({z:15,c:C.text2}))
     ),
     // Day headers (fixed)
-    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',padding:'0 6px',background:C.bg,flexShrink:0}},
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',padding:'0 6px',background:C.bg,flexShrink:0,borderBottom:'1px solid #E5DFD8'}},
       ...DK.map((d,i)=>h('div',{key:d+i,style:{textAlign:'center',fontSize:9,fontWeight:600,color:i===0?C.red:i===6?'#3B82F6':C.text3,padding:'2px 0'}},d))
     ),
     // Scrollable calendar body
@@ -1252,13 +1252,13 @@ function App(){
       weekBars.forEach(bar=>{let slot=0;while(barSlots[slot]&&barSlots[slot].some(b=>!(bar.endCol<b.startCol||bar.startCol>b.endCol))){slot++}if(!barSlots[slot])barSlots[slot]=[];barSlots[slot].push(bar)});
       const bc=barSlots.length;
       const barGap=bc>0?bc*13+5:0;
-      return h('div',{key:'w'+wi,style:{position:'relative',display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',minHeight:55,borderBottom:'1px solid '+C.border2+'80'}},
+      return h('div',{key:'w'+wi,style:{position:'relative',display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',minHeight:110}},
         ...week.map((day,ci)=>{
-          if(!day)return h('div',{key:'e'+ci,style:{padding:2}});
+          if(!day)return h('div',{key:'e'+ci,style:{padding:2,borderRight:ci<6?'1px solid #E5DFD8':'none',borderBottom:'1px solid #E5DFD8'}});
           const it=isT(day);const dw=new Date(cm.y,cm.m,day).getDay();
           const dayTodos=(tfd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
           const dayDone=(afd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
-          return h('div',{key:day,style:{padding:'2px 1px',borderRadius:4,background:it?C.accent+'14':'transparent',border:it?'1.5px solid '+C.accent+'50':'1px solid transparent'}},
+          return h('div',{key:day,style:{padding:'2px 1px',background:it?C.accent+'14':'transparent',borderRight:ci<6?'1px solid #E5DFD8':'none',borderBottom:'1px solid #E5DFD8',borderTop:it?'1.5px solid '+C.accent+'50':'none',borderLeft:it?'1.5px solid '+C.accent+'50':'none'}},
             h('div',{style:{fontSize:11,fontWeight:it?800:500,color:it?C.accent:dw===0?C.red:dw===6?'#3B82F6':C.text2,textAlign:'center',marginBottom:barGap||1}},day),
             // All todos (no limit) - time order
             ...dayTodos.map(t=>{const itags=gTs(t);const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const fClr=itags.length?itags[0].color:null;const bgClr=isRcv?rvColor+'20':isSh?'#3B82F620':fClr?fClr+'20':C.border2;const txtClr=isRcv?rvColor:fClr?fClr:C.text2;const bdrL=isRcv?'2px solid '+rvColor:isSh?'2px solid #3B82F6':'none';return h('div',{key:'ct'+t.id+(t._src||''),onClick:e=>openEdit(t,e,isRcv,t._src),style:{fontSize:7,lineHeight:'9px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:bgClr,color:txtClr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',borderLeft:bdrL,fontWeight:500}},f.t+' '+t.title)}),
