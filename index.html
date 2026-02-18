@@ -89,6 +89,7 @@ function App(){
   const[nNotiAtD,sNNotiAtD]=useState('');const[nNotiAtT,sNNotiAtT]=useState('');
   const[nMemo,sNMemo]=useState('');
   const[nCL,sNCL]=useState([]);const[nCLInput,sNCLInput]=useState('');const[nCLOpen,sNCLOpen]=useState(false);
+  const[nRepeat,sNRepeat]=useState('none');
   const[rT,sRT]=useState('');const[rSD,sRSD]=useState('');const[rED,sRED]=useState('');const[rTg,sRTg]=useState('');
   const[rMemo,sRMemo]=useState('');
   const[showSearch,setShowSearch]=useState(false);const[sq,sSq]=useState('');const[sqDate,sSqDate]=useState('');
@@ -99,6 +100,7 @@ function App(){
   const[eNotiAtD,sENotiAtD]=useState('');const[eNotiAtT,sENotiAtT]=useState('');
   const[eMemo,sEMemo]=useState('');
   const[eCL,sECL]=useState([]);const[eCLInput,sECLInput]=useState('');const[eCLOpen,sECLOpen]=useState(false);
+  const[eRepeat,sERepeat]=useState('none');
   const[editRec,setEditRec]=useState(null);
   const[erT,sERT]=useState('');const[erSD,sERSD]=useState('');const[erED,sERED]=useState('');const[erTg,sERTg]=useState('');
   const[erMemo,sERMemo]=useState('');
@@ -434,23 +436,52 @@ function App(){
   const todayDS=toDS(td);
 
   // ═══ CRUD ═══
+  // ★ Repeat helpers
+  const repeatOpts=[{v:'none',l:'없음'},{v:'daily',l:'매일'},{v:'weekdays',l:'평일(월~금)'},{v:'weekly',l:'매주'},{v:'monthly',l:'매월'}];
+  const repeatLabel=r=>{const o=repeatOpts.find(x=>x.v===r);return o?o.l:'없음'};
+  const nextRepeatDT=(dtStr,rp)=>{
+    const d=new Date(dtStr);
+    if(rp==='daily')d.setDate(d.getDate()+1);
+    else if(rp==='weekdays'){do{d.setDate(d.getDate()+1)}while(d.getDay()===0||d.getDay()===6)}
+    else if(rp==='weekly')d.setDate(d.getDate()+7);
+    else if(rp==='monthly')d.setMonth(d.getMonth()+1);
+    return d.toISOString();
+  };
   const addTodo=()=>{
     if(!nT.trim())return;
     const dt=nD&&nTi?nD+'T'+nTi:nD?nD+'T00:00':new Date().toISOString();
     const notiAt=(nNotiBefore==='custom'&&nNotiAtD&&nNotiAtT)?nNotiAtD+'T'+nNotiAtT:null;
-    const item={id:Date.now().toString(),title:nT.trim(),memo:nMemo.trim()||'',checklist:nCL.length>0?nCL:[],datetime:dt,tagId:nTg||null,notiOn:nNotiOn,notiBefore:nNotiBefore==='custom'?null:nNotiBefore,notiAt:notiAt,createdAt:new Date().toISOString()};
+    const item={id:Date.now().toString(),title:nT.trim(),memo:nMemo.trim()||'',checklist:nCL.length>0?nCL:[],datetime:dt,tagId:nTg||null,notiOn:nNotiOn,notiBefore:nNotiBefore==='custom'?null:nNotiBefore,notiAt:notiAt,repeat:nRepeat!=='none'?nRepeat:null,createdAt:new Date().toISOString()};
     if(writeMode==='shared'){sShT([...shTodos,item].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
     else{sT([...todos,item].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
-    sNT('');sND('');sNTi('');sNTg('');sNMemo('');sNCL([]);sNCLInput('');sNCLOpen(false);sNNotiOn(true);sNNotiBefore(30);sNNotiAtD('');sNNotiAtT('');setShowAdd(false);
+    sNT('');sND('');sNTi('');sNTg('');sNMemo('');sNCL([]);sNCLInput('');sNCLOpen(false);sNRepeat('none');sNNotiOn(true);sNNotiBefore(30);sNNotiAtD('');sNNotiAtT('');setShowAdd(false);
   };
   const completeTodo=(id,src)=>{
-    if(src==='received')return; // 공유받은 일정은 완료 불가
+    if(src==='received')return;
     setFadingOut(p=>new Set([...p,id]));
     setTimeout(()=>{
-      if(src==='shared'){const t=shTodos.find(x=>x.id===id);if(t){sShA([{...t,completedAt:new Date().toISOString()},...shArchive]);sShT(shTodos.filter(x=>x.id!==id))}}
-      else{const t=todos.find(x=>x.id===id);if(t){sA([{...t,completedAt:new Date().toISOString()},...archive]);sT(todos.filter(x=>x.id!==id))}}
+      if(src==='shared'){
+        const t=shTodos.find(x=>x.id===id);
+        if(t){
+          sShA([{...t,completedAt:new Date().toISOString()},...shArchive]);
+          if(t.repeat){
+            const next={...t,id:Date.now().toString(),datetime:nextRepeatDT(t.datetime,t.repeat),checklist:t.checklist?t.checklist.map(c=>({...c,done:false})):[]};
+            sShT([...shTodos.filter(x=>x.id!==id),next].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));
+            showToast('✓ 완료 → 다음 '+repeatLabel(t.repeat)+' 일정 생성');
+          }else{sShT(shTodos.filter(x=>x.id!==id));showToast('✓ 완료 처리됨')}
+        }
+      }else{
+        const t=todos.find(x=>x.id===id);
+        if(t){
+          sA([{...t,completedAt:new Date().toISOString()},...archive]);
+          if(t.repeat){
+            const next={...t,id:Date.now().toString(),datetime:nextRepeatDT(t.datetime,t.repeat),checklist:t.checklist?t.checklist.map(c=>({...c,done:false})):[]};
+            sT([...todos.filter(x=>x.id!==id),next].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));
+            showToast('✓ 완료 → 다음 '+repeatLabel(t.repeat)+' 일정 생성');
+          }else{sT(todos.filter(x=>x.id!==id));showToast('✓ 완료 처리됨')}
+        }
+      }
       setFadingOut(p=>{const n=new Set(p);n.delete(id);return n});
-      showToast('✓ 완료 처리됨');
     },350);
   };
   const restoreTodo=(todo,src)=>{
@@ -471,6 +502,7 @@ function App(){
     sETi(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'));
     sETg(todo.tagId||'');sEMemo(todo.memo||'');sENotiOn(todo.notiOn!==false);
     sECL(todo.checklist||[]);sECLInput('');sECLOpen((todo.checklist||[]).length>0);
+    sERepeat(todo.repeat||'none');
     setViewOnly(!!readOnly);setEditSource(src||'personal');setEditOrigSrc(src||'personal');
     if(todo.notiAt){
       sENotiBefore('custom');
@@ -487,7 +519,7 @@ function App(){
     const notiAt=(eNotiBefore==='custom'&&eNotiAtD&&eNotiAtT)?eNotiAtD+'T'+eNotiAtT:null;
     const oldKeys=notifiedRef.current.filter(k=>k.startsWith(editTodo.id+'_'));
     if(oldKeys.length>0){notifiedRef.current=notifiedRef.current.filter(k=>!k.startsWith(editTodo.id+'_'));sv(SK.noti,notifiedRef.current)}
-    const updated={...editTodo,title:eT.trim(),memo:eMemo.trim()||'',checklist:eCL,datetime:dt,tagId:eTg||null,notiOn:eNotiOn,notiBefore:eNotiBefore==='custom'?null:eNotiBefore,notiAt:notiAt};delete updated._src;
+    const updated={...editTodo,title:eT.trim(),memo:eMemo.trim()||'',checklist:eCL,datetime:dt,tagId:eTg||null,notiOn:eNotiOn,notiBefore:eNotiBefore==='custom'?null:eNotiBefore,notiAt:notiAt,repeat:eRepeat!=='none'?eRepeat:null};delete updated._src;
     if(editOrigSrc!==editSource){
       // Move between stores
       if(editOrigSrc==='shared'){sShT(shTodos.filter(t=>t.id!==editTodo.id))}else{sT(todos.filter(t=>t.id!==editTodo.id))}
@@ -683,7 +715,7 @@ function App(){
     if(showReceived)addToMap(rcvTodos,'received');
     return mp;
   },[todos,shTodos,rcvTodos,cm,showMyShared,showReceived]);
-  // ★ Archive items for calendar (completed todos)
+  // ★ Archive items for calendar (completed todos - all sources)
   const afd=useMemo(()=>{
     const mp={};
     const addToMap=(list,src)=>list.forEach(t=>{
@@ -692,8 +724,9 @@ function App(){
     });
     addToMap(archive,'personal');
     if(showMyShared)addToMap(shArchive,'shared');
+    if(showReceived)addToMap(rcvArchive,'received');
     return mp;
-  },[archive,shArchive,cm,showMyShared]);
+  },[archive,shArchive,rcvArchive,cm,showMyShared,showReceived]);
   const recForMonth=useMemo(()=>{
     const mS=new Date(cm.y,cm.m,1),mE=new Date(cm.y,cm.m+1,0);
     const filt=list=>list.filter(r=>{const s=localDate(r.startDate),e=localDate(r.endDate);return s<=mE&&e>=mS});
@@ -1002,6 +1035,10 @@ function App(){
       h('div',{style:{display:'flex',gap:6}},h('input',{type:'date',value:eD,onChange:e=>sED(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly}),h('input',{type:'time',value:eTi,onChange:e=>sETi(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly})),
       h('select',{value:eTg,onChange:e=>sETg(e.target.value),style:S.input,disabled:viewOnly},h('option',{value:''},'태그 없음'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
       viewOnly?null:notiRow(eNotiOn,sENotiOn,eNotiBefore,sENotiBefore,eNotiAtD,sENotiAtD,eNotiAtT,sENotiAtT),
+      viewOnly?editTodo&&editTodo.repeat?h('div',{style:{fontSize:11,color:C.accent,marginBottom:7}},'🔁 '+repeatLabel(editTodo.repeat)):null:h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:7}},
+        h('span',{style:{fontSize:11,color:C.text2,fontWeight:600}},'🔁 반복'),
+        ...repeatOpts.map(o=>h('button',{key:o.v,onClick:()=>sERepeat(o.v),style:{padding:'4px 8px',borderRadius:14,border:'1px solid '+(eRepeat===o.v?C.accent+'50':C.border),background:eRepeat===o.v?C.accent+'18':'transparent',color:eRepeat===o.v?C.accent:C.text3,fontSize:10,fontWeight:eRepeat===o.v?700:500,cursor:'pointer'}},o.l))
+      ),
       h('textarea',{placeholder:'메모',value:eMemo,onChange:e=>sEMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden',background:viewOnly?C.border2:C.bg},readOnly:viewOnly}),
       clUI(eCL,sECL,eCLInput,sECLInput,eCLOpen,sECLOpen,viewOnly),
       viewOnly?h('button',{onClick:()=>{setEditTodo(null);setViewOnly(false)},style:{...S.submitBtn,background:C.text3}},'닫기'):null,
@@ -1053,8 +1090,8 @@ function App(){
             h('div',{style:{fontSize:10,fontWeight:it?700:400,color:it?C.accent:dw===0?C.red:dw===6?'#3B82F6':C.text2,textAlign:'center',marginBottom:barGap||1}},day),
             // Todos sorted by time (records are shown as bars above, no duplication)
             ...dayTodos.map(t=>{const tg=gT(t.tagId);const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const bgClr=isRcv?rvColor+'15':isSh?'#3B82F615':tg?tg.color+'15':C.border2;const txtClr=isRcv?rvColor:tg?tg.color:C.text2;const bdrL=isRcv?'2px solid '+rvColor:isSh?'2px solid #3B82F6':'none';return h('div',{key:'ct'+t.id+(t._src||''),onClick:e=>openEdit(t,e,isRcv,t._src),style:{fontSize:6,lineHeight:'8px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:bgClr,color:txtClr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',display:'flex',gap:1,borderLeft:bdrL}},h('span',{style:{color:C.text3,fontSize:6,flexShrink:0}},f.t),h('span',null,t.title))}),
-            // ★ Completed todos with strikethrough
-            ...dayDone.map(t=>{const f=fmt(t.datetime);return h('div',{key:'cd'+t.id+(t.completedAt||''),style:{fontSize:6,lineHeight:'8px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:C.greenBg,color:C.green,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',gap:1,opacity:.5,textDecoration:'line-through'}},h('span',{style:{fontSize:6,flexShrink:0}},f.t),h('span',{style:{textDecoration:'line-through'}},t.title))})
+            // ★ Completed todos with strikethrough (prominent)
+            ...dayDone.map(t=>{const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const clr=isRcv?rvColor:isSh?'#3B82F6':'#4A8C5E';return h('div',{key:'cd'+t.id+(t.completedAt||'')+(t._src||''),style:{fontSize:6,lineHeight:'8px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:clr+'25',color:clr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',gap:1,opacity:.85}},h('span',{style:{fontSize:6,flexShrink:0}},f.t),h('span',{style:{textDecoration:'line-through',fontWeight:600}},'✓'+t.title))})
           )
         }),
         ...barSlots.flatMap((slot,si)=>slot.map(bar=>{
@@ -1111,6 +1148,7 @@ function App(){
           BellI({z:10,c:C.accent+'80'}),
           notiInfo?h('span',{style:{fontSize:8,color:C.accent+'80'}},notiInfo.m+'/'+notiInfo.d+' '+notiInfo.t):null
         ):null,
+        todo.repeat?h('span',{style:{fontSize:8,color:'#8B5CF6',fontWeight:700,flexShrink:0,marginRight:1}},'🔁'):null,
         h('span',{style:{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},todo.title),
         todo.checklist&&todo.checklist.length>0?h('span',{style:{fontSize:8,color:C.green,fontWeight:700,background:C.greenBg,padding:'1px 4px',borderRadius:4,flexShrink:0,marginLeft:2}},todo.checklist.filter(x=>x.done).length+'/'+todo.checklist.length):null,
         isRcv&&todo._owner?h('span',{style:{fontSize:8,color:rvColor,fontWeight:600,flexShrink:0,marginLeft:2}},todo._owner):null,
@@ -1204,6 +1242,10 @@ function App(){
       h('div',{style:{display:'flex',gap:6}},h('input',{type:'date',value:nD,onChange:e=>sND(e.target.value),style:{...S.input,flex:1}}),h('input',{type:'time',value:nTi,onChange:e=>sNTi(e.target.value),style:{...S.input,flex:1}})),
       h('select',{value:nTg,onChange:e=>sNTg(e.target.value),style:S.input},h('option',{value:''},'태그 선택'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
       notiRow(nNotiOn,sNNotiOn,nNotiBefore,sNNotiBefore,nNotiAtD,sNNotiAtD,nNotiAtT,sNNotiAtT),
+      h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:7}},
+        h('span',{style:{fontSize:11,color:C.text2,fontWeight:600}},'🔁 반복'),
+        ...repeatOpts.map(o=>h('button',{key:o.v,onClick:()=>sNRepeat(o.v),style:{padding:'4px 8px',borderRadius:14,border:'1px solid '+(nRepeat===o.v?C.accent+'50':C.border),background:nRepeat===o.v?C.accent+'18':'transparent',color:nRepeat===o.v?C.accent:C.text3,fontSize:10,fontWeight:nRepeat===o.v?700:500,cursor:'pointer'}},o.l))
+      ),
       h('textarea',{placeholder:'메모 (선택)',value:nMemo,onChange:e=>sNMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden'}}),
       clUI(nCL,sNCL,nCLInput,sNCLInput,nCLOpen,sNCLOpen,false),
       h('button',{onClick:addTodo,style:{...S.submitBtn,background:writeMode==='shared'?'#3B82F6':C.accent}},writeMode==='shared'?'📤 공유 추가':'추가')
@@ -1330,6 +1372,110 @@ function App(){
           ...allArchive.map(a=>arcEl(a,a._src))
         ):null
       );
+  }else if(tab==='stats'){
+    // ═══ STATISTICS ═══
+    const now=new Date();
+    const allDone=[...archive,...shArchive];
+    // This week (Mon~Sun)
+    const weekStart=new Date(now);weekStart.setDate(now.getDate()-((now.getDay()+6)%7));weekStart.setHours(0,0,0,0);
+    const thisWeekDone=allDone.filter(a=>a.completedAt&&new Date(a.completedAt)>=weekStart).length;
+    // This month
+    const monthStart=new Date(now.getFullYear(),now.getMonth(),1);
+    const thisMonthDone=allDone.filter(a=>a.completedAt&&new Date(a.completedAt)>=monthStart).length;
+    // Today
+    const todayStart2=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const todayDone=allDone.filter(a=>a.completedAt&&new Date(a.completedAt)>=todayStart2).length;
+    // Weekly trend (last 8 weeks)
+    const weeklyData=[];
+    for(let w=7;w>=0;w--){
+      const ws=new Date(weekStart);ws.setDate(ws.getDate()-w*7);
+      const we=new Date(ws);we.setDate(we.getDate()+7);
+      const cnt=allDone.filter(a=>a.completedAt&&new Date(a.completedAt)>=ws&&new Date(a.completedAt)<we).length;
+      const lbl=(ws.getMonth()+1)+'/'+ws.getDate()+'~';
+      weeklyData.push({lbl,cnt});
+    }
+    const maxW=Math.max(...weeklyData.map(w=>w.cnt),1);
+    // Tag distribution
+    const tagDist={};
+    allDone.forEach(a=>{const tid=a.tagId||'_none';tagDist[tid]=(tagDist[tid]||0)+1});
+    const tagEntries=Object.entries(tagDist).sort((a,b)=>b[1]-a[1]);
+    const tagTotal=allDone.length||1;
+    // Streak
+    let streak=0;
+    const checkDay=new Date(now);checkDay.setHours(0,0,0,0);
+    // If nothing done today, start from yesterday
+    const todayHasDone=allDone.some(a=>a.completedAt&&new Date(a.completedAt)>=checkDay);
+    if(!todayHasDone)checkDay.setDate(checkDay.getDate()-1);
+    while(true){
+      const dayEnd=new Date(checkDay);dayEnd.setDate(dayEnd.getDate()+1);
+      const hasDone=allDone.some(a=>a.completedAt&&new Date(a.completedAt)>=checkDay&&new Date(a.completedAt)<dayEnd);
+      if(hasDone){streak++;checkDay.setDate(checkDay.getDate()-1)}else break;
+    }
+    // Repeat task count
+    const repeatCount=[...todos,...shTodos].filter(t=>t.repeat).length;
+
+    const statCard=(emoji,label,value,sub,color)=>h('div',{style:{flex:1,minWidth:0,background:C.card,borderRadius:10,padding:'12px 10px',border:'1px solid '+C.border,textAlign:'center',boxShadow:dark?'none':'0 1px 4px rgba(0,0,0,0.03)'}},
+      h('div',{style:{fontSize:20,marginBottom:2}},emoji),
+      h('div',{style:{fontSize:20,fontWeight:700,color:color||C.accent}},value),
+      h('div',{style:{fontSize:10,fontWeight:600,color:C.text2,marginTop:1}},label),
+      sub?h('div',{style:{fontSize:9,color:C.text3,marginTop:1}},sub):null
+    );
+
+    content=h('div',{style:{padding:12}},
+      // Summary cards row 1
+      h('div',{style:{display:'flex',gap:8,marginBottom:8}},
+        statCard('🔥','연속 달성',streak+'일',streak>=7?'대단해요!':streak>=3?'잘 하고 있어요':'시작이 반!','#E8663C'),
+        statCard('📅','오늘 완료',todayDone+'개',null,C.accent),
+        statCard('📊','이번 주',thisWeekDone+'개',null,'#3B82F6')
+      ),
+      // Summary cards row 2
+      h('div',{style:{display:'flex',gap:8,marginBottom:12}},
+        statCard('🗓','이번 달',thisMonthDone+'개',null,C.green),
+        statCard('✅','전체 완료',allDone.length+'개',null,'#8B5CF6'),
+        statCard('🔁','반복 일정',repeatCount+'개',null,'#EC4899')
+      ),
+      // Weekly trend chart
+      h('div',{style:{...S.setS,marginBottom:10}},
+        h('div',{style:S.setST},'📈 주간 완료 추이'),
+        h('div',{style:{display:'flex',alignItems:'flex-end',gap:4,height:100,padding:'8px 0'}},
+          ...weeklyData.map((w,i)=>h('div',{key:i,style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%'}},
+            h('div',{style:{fontSize:9,fontWeight:700,color:i===weeklyData.length-1?C.accent:C.text3,marginBottom:2}},w.cnt||''),
+            h('div',{style:{width:'100%',maxWidth:28,height:Math.max(w.cnt/maxW*70,3),background:i===weeklyData.length-1?C.accent:'linear-gradient(180deg,'+C.accent+'40,'+C.accent+'15)',borderRadius:'4px 4px 0 0',transition:'height 0.3s'}}),
+            h('div',{style:{fontSize:7,color:C.text3,marginTop:3,whiteSpace:'nowrap'}},w.lbl)
+          ))
+        )
+      ),
+      // Tag distribution
+      h('div',{style:{...S.setS,marginBottom:10}},
+        h('div',{style:S.setST},'🏷 태그별 완료'),
+        tagEntries.length===0?h('div',{style:{fontSize:12,color:C.text3,padding:8}},'아직 완료 데이터가 없습니다'):null,
+        ...tagEntries.map(([tid,cnt])=>{
+          const tg=tags.find(t=>t.id===tid);
+          const nm=tid==='_none'?'태그 없음':tg?tg.name:'삭제된 태그';
+          const clr=tg?tg.color:C.text3;
+          const pct=Math.round(cnt/tagTotal*100);
+          return h('div',{key:tid,style:{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid '+C.border2}},
+            h('div',{style:{width:8,height:8,borderRadius:'50%',background:clr,flexShrink:0}}),
+            h('span',{style:{fontSize:12,color:C.text,flex:1}},nm),
+            h('div',{style:{width:80,height:6,borderRadius:3,background:C.border,overflow:'hidden',flexShrink:0}},
+              h('div',{style:{height:'100%',borderRadius:3,background:clr,width:pct+'%'}})
+            ),
+            h('span',{style:{fontSize:11,fontWeight:600,color:clr,minWidth:30,textAlign:'right'}},cnt+'개'),
+            h('span',{style:{fontSize:9,color:C.text3,minWidth:28,textAlign:'right'}},pct+'%')
+          )
+        })
+      ),
+      // Quick tips
+      h('div',{style:{...S.setS,background:C.accent+'08',borderColor:C.accent+'20'}},
+        h('div',{style:{fontSize:11,color:C.accent,fontWeight:600,marginBottom:4}},'💡 팁'),
+        h('div',{style:{fontSize:11,color:C.text2,lineHeight:'1.6'}},
+          streak>=7?'🔥 '+streak+'일 연속! 놀라운 꾸준함이에요!':
+          streak>=3?'👏 '+streak+'일 연속 달성 중. 이 페이스 유지!':
+          thisWeekDone>0?'✨ 이번 주 '+thisWeekDone+'개 완료! 매일 1개씩 도전해보세요.':
+          '📝 오늘 할 일을 추가하고 완료해보세요!'
+        )
+      )
+    );
   }else{
     content=h('div',{style:{padding:12}},
       // ★ Dark mode section
@@ -1429,7 +1575,7 @@ function App(){
   }
 
   const nav=h('div',{style:S.nav},
-    ...[['current','📝','현재'],['archive','✅','과거'],['settings','⚙️','설정']].map(([k,ic,lb])=>
+    ...[['current','📝','현재'],['archive','✅','과거'],['stats','📊','통계'],['settings','⚙️','설정']].map(([k,ic,lb])=>
       h('button',{key:k,onClick:()=>{setTab(k);setShowSearch(false);sSq('');sSqDate('');setShowSortMenu(false)},style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,background:'none',border:'none',cursor:'pointer',padding:'5px 0'}},
         h('span',{style:{fontSize:17}},ic),h('span',{style:{fontSize:9,fontWeight:500,color:tab===k?C.accent:C.text3}},lb)
       )
@@ -1438,7 +1584,7 @@ function App(){
 
   // Wide nav for Fold5 - only 현재+설정 (과거 is already visible in split view)
   const wideNav=h('div',{style:S.nav},
-    ...[['current','📝','현재'],['settings','⚙️','설정']].map(([k,ic,lb])=>
+    ...[['current','📝','현재'],['stats','📊','통계'],['settings','⚙️','설정']].map(([k,ic,lb])=>
       h('button',{key:k,onClick:()=>{setTab(k);setShowSearch(false);sSq('');sSqDate('');setShowSortMenu(false)},style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,background:'none',border:'none',cursor:'pointer',padding:'5px 0'}},
         h('span',{style:{fontSize:17}},ic),h('span',{style:{fontSize:9,fontWeight:500,color:tab===k?C.accent:C.text3}},lb)
       )
