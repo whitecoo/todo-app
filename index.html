@@ -98,9 +98,6 @@ function App(){
   const[toast,setToast]=useState(null);
   const toastTimer=useRef(null);
   const[isWide,setIsWide]=useState(window.innerWidth>=580);
-
-  // 디버그: 화면 너비 표시 (확인 후 제거)
-  const[dbgW,setDbgW]=useState(window.innerWidth);
   // ★ NEW: Sort mode & dropdown
   const[sortMode,setSortMode]=useState(()=>ld(SK.sort,'date'));
   const[showSortMenu,setShowSortMenu]=useState(false);
@@ -113,7 +110,7 @@ function App(){
   const[yesterdayItems,setYesterdayItems]=useState([]);
 
   useEffect(()=>{
-    const onResize=()=>{setIsWide(window.innerWidth>=580);setDbgW(window.innerWidth)};
+    const onResize=()=>{setIsWide(window.innerWidth>=580)};
     window.addEventListener('resize',onResize);
     window.addEventListener('orientationchange',()=>setTimeout(onResize,300));
     // Samsung Fold unfold detection
@@ -658,8 +655,7 @@ function App(){
         :'설정'),
       tab==='current'&&vm==='list'?h('span',{style:{fontSize:9,color:C.accent,background:C.accent+'12',padding:'1px 6px',borderRadius:8,fontWeight:600}},sortLabel):null,
       tab==='current'&&notiPerm!=='granted'?h('button',{onClick:requestNoti,style:{background:'none',border:'1px solid '+C.border,borderRadius:6,padding:'2px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:3}},BellI({z:12,c:C.text3}),h('span',{style:{fontSize:9,color:C.text3}},'알림')):null,
-      tab==='current'&&notiPerm==='granted'?h('span',{style:{display:'flex',alignItems:'center',gap:2}},BellI({z:11,c:C.green}),h('span',{style:{fontSize:9,color:C.green}},'ON')):null,
-      h('span',{style:{fontSize:8,color:isWide?'#22C55E':'#EF4444',background:isWide?'#22C55E20':'#EF444420',padding:'1px 4px',borderRadius:4,fontWeight:700}},dbgW+'px '+(isWide?'WIDE':'NARROW'))
+      tab==='current'&&notiPerm==='granted'?h('span',{style:{display:'flex',alignItems:'center',gap:2}},BellI({z:11,c:C.green}),h('span',{style:{fontSize:9,color:C.green}},'ON')):null
     )
   );
 
@@ -1059,27 +1055,25 @@ function App(){
     )
   );
 
-  // ★ Wide layout for Fold5 - CSS Grid column-first fill
+  // ★ Wide layout for Fold5 - column-first fill
   if(isWide&&tab==='current'&&vm==='list'){
     const itemCount=unifiedList.length;
-    const rowCount=Math.ceil(itemCount/2)||1;
+    const useTwoCol=itemCount>=5;
+    const rowCount=Math.ceil(itemCount/2);
     return h('div',{style:{...S.root,maxWidth:780}},
       header,searchP,yesterdayPrompt,
       h('div',{style:{padding:'0 6px'}},dtSection),
-      h('div',{style:{textAlign:'center',padding:'2px',background:'#22C55E20',fontSize:9,color:'#22C55E',fontWeight:700}},'✓ WIDE MODE ('+itemCount+'items, '+rowCount+'rows)'),
       h('div',{style:{...S.content}},
         !itemCount&&!showAdd&&todayDTTotal===0?h('div',{style:S.empty},h('div',{style:{fontSize:32,marginBottom:8}},'✓'),h('div',{style:{fontSize:13,color:C.text2}},'할 일이 없습니다'),h('div',{style:{fontSize:11,marginTop:4,color:C.text3}},'+ 버튼으로 추가')):null,
-        itemCount>0?h('div',{style:{
+        itemCount>0?h('div',{style:useTwoCol?{
           display:'grid',
           gridTemplateColumns:'1fr 1fr',
           gridAutoFlow:'column',
-          gridTemplateRows:'repeat('+rowCount+', auto)',
-          columnGap:0,
-          borderLeft:'none'
-        }},
-          ...unifiedList.map((item,i)=>h('div',{key:'w'+(item.type==='todo'?'t_':'r_')+item.data.id,style:{
+          gridTemplateRows:'repeat('+rowCount+', auto)'
+        }:{/* 1열: 그냥 세로 나열 */}},
+          ...unifiedList.map((item,i)=>h('div',{key:'w'+(item.type==='todo'?'t_':'r_')+item.data.id,style:useTwoCol?{
             borderRight:i<rowCount?'1px solid '+C.border:'none'
-          }},
+          }:{}},
             item.type==='todo'?todoEl(item.data):recEl(item.data)
           ))
         ):null,
