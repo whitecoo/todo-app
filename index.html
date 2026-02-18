@@ -910,10 +910,9 @@ function App(){
     h('div',{style:{background:C.card,borderRadius:16,padding:18,maxWidth:340,width:'90%',animation:'scaleIn 0.15s ease',boxShadow:'0 4px 20px rgba(0,0,0,0.15)'},onClick:e=>e.stopPropagation()},
       h('div',{style:{fontSize:15,fontWeight:700,color:C.text,marginBottom:8}},confirm.title),
       h('div',{style:{fontSize:13,color:C.text2,marginBottom:18,whiteSpace:'pre-line',lineHeight:'1.5'}},confirm.msg),
-      h('div',{style:{display:'flex',gap:8,flexWrap:confirm.extra?'wrap':'nowrap'}},
-        h('button',{onClick:confirm.onCancel,style:{flex:confirm.extra?'1 1 100%':'1',padding:'10px',background:C.bg,color:C.text2,border:'1px solid '+C.border,borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer',order:confirm.extra?3:0}},'취소'),
-        h('button',{onClick:confirm.onOk,style:{flex:1,padding:'10px',background:confirm.okColor||C.red,color:'#FFF',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},confirm.okLabel||'삭제'),
-        confirm.extra||null
+      h('div',{style:{display:'flex',gap:8}},
+        h('button',{onClick:confirm.onCancel,style:{flex:1,padding:'10px',background:C.bg,color:C.text2,border:'1px solid '+C.border,borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},'취소'),
+        h('button',{onClick:confirm.onOk,style:{flex:1,padding:'10px',background:confirm.okColor||C.red,color:'#FFF',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},confirm.okLabel||'삭제')
       )
     )
   ):null;
@@ -1285,7 +1284,7 @@ function App(){
     const tg=gT(todo.tagId);const isDaily=todo.isDailyTask;const isSh=src==='shared';const isRcv=src==='received';
     const borderClr=isRcv?rvColor+'30':isSh?'#3B82F630':'transparent';
     const cdStr=cd?(cd.getFullYear()+'년 '+(cd.getMonth()+1)+'월 '+cd.getDate()+'일 '+String(cd.getHours()).padStart(2,'0')+'시 '+String(cd.getMinutes()).padStart(2,'0')+'분'):'';
-    return h('div',{key:todo.id+(todo.completedAt||'')+(src||''),onClick:e=>{if(!isDaily)openEdit(todo,e,isRcv||false,src)},style:{display:'flex',alignItems:'center',padding:'7px 14px',borderBottom:'1px solid '+C.border2,opacity:.85,cursor:isDaily?'default':'pointer',borderLeft:'3px solid '+borderClr}},
+    return h('div',{key:todo.id+(todo.completedAt||'')+(src||''),onClick:e=>{if(!isDaily)openEdit(todo,e,true,src)},style:{display:'flex',alignItems:'center',padding:'7px 14px',borderBottom:'1px solid '+C.border2,opacity:.85,cursor:isDaily?'default':'pointer',borderLeft:'3px solid '+borderClr}},
       h('div',{style:{flex:1,minWidth:0}},
         isDaily?h('div',{style:{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}},
           h('span',{style:{fontSize:9,fontWeight:700,color:'#FFF',background:isRcv?rvColor:isSh?'#3B82F6':'#E8A838',padding:'1px 5px',borderRadius:4,flexShrink:0}},isRcv?'📥 공유받은 할일':isSh?'📤 오늘의 할일':'오늘의 할일'),
