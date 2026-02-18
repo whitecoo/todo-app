@@ -1232,34 +1232,38 @@ function App(){
 
   // ═══ CALENDAR VIEW ═══
   const CW=100/7;
-  const calView=h('div',{style:{padding:'0 6px',overflowY:'auto',WebkitOverflowScrolling:'touch',flex:1}},
-    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 4px 6px',position:'sticky',top:0,background:C.bg,zIndex:3}},
+  const wkCnt=weeks.length;
+  const calView=h('div',{style:{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}},
+    // Month nav (fixed)
+    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 4px 6px',background:C.bg,flexShrink:0}},
       h('button',{onClick:pM,style:S.cNav},CL({z:15,c:C.text2})),
       h('button',{onClick:goTd,style:{background:'none',border:'none',cursor:'pointer'}},h('span',{style:{fontSize:14,fontWeight:600,color:C.text}},cm.y+'년 '+(cm.m+1)+'월')),
       h('button',{onClick:nM,style:S.cNav},CR({z:15,c:C.text2}))
     ),
-    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',marginBottom:2,position:'sticky',top:36,background:C.bg,zIndex:3}},
+    // Day headers (fixed)
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',padding:'0 6px',background:C.bg,flexShrink:0}},
       ...DK.map((d,i)=>h('div',{key:d+i,style:{textAlign:'center',fontSize:9,fontWeight:600,color:i===0?C.red:i===6?'#3B82F6':C.text3,padding:'2px 0'}},d))
     ),
+    // Week rows - fill remaining space equally, scroll when needed
+    h('div',{style:{flex:1,display:'flex',flexDirection:'column',padding:'0 6px',overflowY:'auto',WebkitOverflowScrolling:'touch'}},
     ...weeks.map((week,wi)=>{
       const weekBars=recBars.filter(b=>b.wi===wi);
       const barSlots=[];
       weekBars.forEach(bar=>{let slot=0;while(barSlots[slot]&&barSlots[slot].some(b=>!(bar.endCol<b.startCol||bar.startCol>b.endCol))){slot++}if(!barSlots[slot])barSlots[slot]=[];barSlots[slot].push(bar)});
       const bc=barSlots.length;
       const barGap=bc>0?bc*13+5:0;
-      return h('div',{key:'w'+wi,style:{position:'relative',display:'grid',gridTemplateColumns:'repeat(7,1fr)'}},
+      return h('div',{key:'w'+wi,style:{position:'relative',display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',flex:1,minHeight:60,borderBottom:'1px solid '+C.border2+'80'}},
         ...week.map((day,ci)=>{
-          if(!day)return h('div',{key:'e'+ci,style:{minHeight:22+barGap,padding:2,borderBottom:'1px solid '+C.border2+'60'}});
+          if(!day)return h('div',{key:'e'+ci,style:{padding:2,overflow:'hidden'}});
           const it=isT(day);const dw=new Date(cm.y,cm.m,day).getDay();
-          // ★ Todos for this day sorted by time
           const dayTodos=(tfd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
           const dayDone=(afd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
-          return h('div',{key:day,style:{minHeight:22+barGap,padding:'2px 1px',borderRadius:4,background:it?C.accent+'14':'transparent',border:it?'1.5px solid '+C.accent+'50':'1px solid transparent',borderBottom:'1px solid '+C.border2+'60'}},
+          return h('div',{key:day,style:{padding:'2px 1px',borderRadius:4,background:it?C.accent+'14':'transparent',border:it?'1.5px solid '+C.accent+'50':'1px solid transparent',overflow:'hidden',position:'relative'}},
             h('div',{style:{fontSize:11,fontWeight:it?800:500,color:it?C.accent:dw===0?C.red:dw===6?'#3B82F6':C.text2,textAlign:'center',marginBottom:barGap||1}},day),
-            // Todos sorted by time (records are shown as bars above, no duplication)
-            ...dayTodos.map(t=>{const itags=gTs(t);const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const fClr=itags.length?itags[0].color:null;const bgClr=isRcv?rvColor+'20':isSh?'#3B82F620':fClr?fClr+'20':C.border2;const txtClr=isRcv?rvColor:fClr?fClr:C.text2;const bdrL=isRcv?'2px solid '+rvColor:isSh?'2px solid #3B82F6':'none';return h('div',{key:'ct'+t.id+(t._src||''),onClick:e=>openEdit(t,e,isRcv,t._src),style:{fontSize:7,lineHeight:'9px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:bgClr,color:txtClr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',display:'flex',gap:1,borderLeft:bdrL,fontWeight:500}},h('span',{style:{color:C.text3,fontSize:6,flexShrink:0}},f.t),h('span',null,t.title))}),
-            // ★ Completed todos with strikethrough (prominent)
-            ...dayDone.map(t=>{const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const clr=isRcv?rvColor:isSh?'#3B82F6':'#4A8C5E';return h('div',{key:'cd'+t.id+(t.completedAt||'')+(t._src||''),style:{fontSize:7,lineHeight:'9px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:clr+'30',color:clr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',gap:1,opacity:.9,fontWeight:600}},h('span',{style:{fontSize:6,flexShrink:0}},f.t),h('span',{style:{textDecoration:'line-through'}},'✓'+t.title))})
+            // All todos (no limit) - time order
+            ...dayTodos.map(t=>{const itags=gTs(t);const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const fClr=itags.length?itags[0].color:null;const bgClr=isRcv?rvColor+'20':isSh?'#3B82F620':fClr?fClr+'20':C.border2;const txtClr=isRcv?rvColor:fClr?fClr:C.text2;const bdrL=isRcv?'2px solid '+rvColor:isSh?'2px solid #3B82F6':'none';return h('div',{key:'ct'+t.id+(t._src||''),onClick:e=>openEdit(t,e,isRcv,t._src),style:{fontSize:7,lineHeight:'9px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:bgClr,color:txtClr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',borderLeft:bdrL,fontWeight:500,maxWidth:'100%',display:'block'}},f.t+' '+t.title)}),
+            // All completed (no limit)
+            ...dayDone.map(t=>{const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const clr=isRcv?rvColor:isSh?'#3B82F6':'#4A8C5E';return h('div',{key:'cd'+t.id+(t.completedAt||'')+(t._src||''),style:{fontSize:7,lineHeight:'9px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:clr+'30',color:clr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',opacity:.9,fontWeight:600,textDecoration:'line-through',maxWidth:'100%',display:'block'}},f.t+' ✓'+t.title)})
           )
         }),
         ...barSlots.flatMap((slot,si)=>slot.map(bar=>{
@@ -1273,6 +1277,7 @@ function App(){
         }))
       )
     })
+    )
   );
 
   // ═══ LIST ITEMS ═══
