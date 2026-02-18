@@ -381,7 +381,6 @@ function App(){
   const sDT=useCallback(dt=>{setDailyTasks(dt);sv(SK.dt,dt)},[]);
   const todayDS=toDS(td);
   const todayDT=dailyTasks.filter(d=>d.date===todayDS);
-  const todayDTDone=todayDT.filter(d=>d.done).length;
   const todayDTTotal=todayDT.length;
 
   const addDailyTask=()=>{
@@ -389,13 +388,30 @@ function App(){
     sDT([...dailyTasks,{id:Date.now().toString(),title:dtInput.trim(),done:false,date:todayDS}]);
     setDtInput('');
   };
-  const toggleDailyTask=id=>sDT(dailyTasks.map(d=>d.id===id?{...d,done:!d.done}:d));
+  const completeDailyTask=id=>{
+    const item=dailyTasks.find(d=>d.id===id);
+    if(!item)return;
+    // Add to archive with [오늘의 할일] marker
+    sA([{id:'dt_'+item.id,title:item.title,datetime:new Date().toISOString(),completedAt:new Date().toISOString(),isDailyTask:true,tagId:null},...archive]);
+    // Remove from daily tasks
+    sDT(dailyTasks.filter(d=>d.id!==id));
+    showToast('✓ 완료 → 과거 탭으로 이동');
+  };
+  const undoDailyTask=id=>{
+    const item=dailyTasks.find(d=>d.id===id);
+    if(!item)return;
+    sDT(dailyTasks.map(d=>d.id===id?{...d,done:false}:d));
+  };
   const delDailyTask=id=>sDT(dailyTasks.filter(d=>d.id!==id));
   const moveToTomorrow=(items)=>{
     const tmrw=new Date(td);tmrw.setDate(tmrw.getDate()+1);const tmrwDS=toDS(tmrw);
     sDT(dailyTasks.map(d=>items.find(i=>i.id===d.id)?{...d,date:tmrwDS,done:false}:d));
     setShowYesterdayPrompt(false);
     showToast('→ '+items.length+'개를 내일로 옮겼습니다');
+  };
+  const moveBackToToday=(items)=>{
+    sDT(dailyTasks.map(d=>items.find(i=>i.id===d.id)?{...d,date:todayDS,done:false}:d));
+    showToast('← '+items.length+'개를 오늘로 되돌렸습니다');
   };
   const moveAllToToday=()=>{
     sDT(dailyTasks.map(d=>yesterdayItems.find(i=>i.id===d.id)?{...d,date:todayDS,done:false}:d));
@@ -620,7 +636,7 @@ function App(){
       h('button',{onClick:()=>{setShowSearch(!showSearch);sSq('')},style:{...S.hBtn,borderColor:showSearch?C.accent:C.border}},SI({z:17,c:showSearch?C.accent:C.text2}))
     ),
     h('div',{style:{display:'flex',justifyContent:'center',alignItems:'center',gap:8,marginTop:4}},
-      h('span',{style:S.hCount},tab==='current'?(todos.length+'개 할 일'+(activeRecords.length?' · '+activeRecords.length+'개 기록':'')+(todayDTTotal?' · 오늘 '+todayDTDone+'/'+todayDTTotal:'')+(pastRecords.length?' · 지난 '+pastRecords.length:''))
+      h('span',{style:S.hCount},tab==='current'?(todos.length+'개 할 일'+(activeRecords.length?' · '+activeRecords.length+'개 기록':'')+(todayDTTotal?' · 오늘 '+todayDTTotal+'개':'')+(pastRecords.length?' · 지난 '+pastRecords.length:''))
         :tab==='archive'?(archive.length+'개 완료'+(pastRecords.length?' · '+pastRecords.length+'개 지난 기록':''))
         :'설정'),
       tab==='current'&&vm==='list'?h('span',{style:{fontSize:9,color:C.accent,background:C.accent+'12',padding:'1px 6px',borderRadius:8,fontWeight:600}},sortLabel):null,
@@ -761,16 +777,24 @@ function App(){
   const arcEl=todo=>{
     const f=fmt(todo.datetime),cd=todo.completedAt?new Date(todo.completedAt):null;
     const tg=gT(todo.tagId);
+    const isDaily=todo.isDailyTask;
+    const cdStr=cd?(cd.getFullYear()+'년 '+(cd.getMonth()+1)+'월 '+cd.getDate()+'일 '+String(cd.getHours()).padStart(2,'0')+'시 '+String(cd.getMinutes()).padStart(2,'0')+'분'):'';
     return h('div',{key:todo.id+(todo.completedAt||''),style:{display:'flex',alignItems:'center',padding:'7px 14px',borderBottom:'1px solid '+C.border2,opacity:.6}},
-      h('div',{style:{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:5}},
-        h('span',{style:{fontSize:10,fontWeight:600,color:C.accent,minWidth:30}},f.m+'/'+f.d),
-        h('span',{style:{fontSize:9,color:C.text3}},'('+f.w+')'),
-        h('span',{style:{fontSize:10,color:C.text3,marginRight:3}},f.t),
-        h('span',{style:{fontSize:13,color:C.text2,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},todo.title),
-        tg?h('span',{style:{...S.tSm,background:tg.color+'12',color:tg.color,borderColor:tg.color+'25',flexShrink:0,marginLeft:3}},tg.name):null
+      h('div',{style:{flex:1,minWidth:0}},
+        isDaily?h('div',{style:{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}},
+          h('span',{style:{fontSize:9,fontWeight:700,color:'#FFF',background:'#E8A838',padding:'1px 5px',borderRadius:4,flexShrink:0}},'오늘의 할일'),
+          h('span',{style:{fontSize:13,color:C.text2,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},todo.title),
+          cd?h('span',{style:{fontSize:8,color:C.text3,flexShrink:0}},cdStr):null
+        ):h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+          h('span',{style:{fontSize:10,fontWeight:600,color:C.accent,minWidth:30}},f.m+'/'+f.d),
+          h('span',{style:{fontSize:9,color:C.text3}},'('+f.w+')'),
+          h('span',{style:{fontSize:10,color:C.text3,marginRight:3}},f.t),
+          h('span',{style:{fontSize:13,color:C.text2,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},todo.title),
+          tg?h('span',{style:{...S.tSm,background:tg.color+'12',color:tg.color,borderColor:tg.color+'25',flexShrink:0,marginLeft:3}},tg.name):null
+        )
       ),
       h('div',{style:{display:'flex',alignItems:'center',gap:4,flexShrink:0}},
-        cd?h('span',{style:{fontSize:8,color:C.text3}},(cd.getMonth()+1)+'/'+cd.getDate()):null,
+        !isDaily&&cd?h('span',{style:{fontSize:8,color:C.text3}},(cd.getMonth()+1)+'/'+cd.getDate()):null,
         h('button',{onClick:e=>{e.stopPropagation();restoreTodo(todo)},title:'복구',style:{width:26,height:26,borderRadius:'50%',background:C.accent+'12',border:'1px solid '+C.accent+'30',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',marginLeft:2}},UndoI({z:12,c:C.accent})),
         h('div',{style:{width:16,height:16,borderRadius:'50%',background:C.greenBg,color:C.green,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}},'✓')
       )
@@ -844,27 +868,41 @@ function App(){
     )
   ):null;
 
+  // Tomorrow's daily tasks
+  const tmrw=new Date(td);tmrw.setDate(tmrw.getDate()+1);const tmrwDS=toDS(tmrw);
+  const tomorrowDT=dailyTasks.filter(d=>d.date===tmrwDS);
+
   // ═══ DAILY TASKS SECTION (오늘 할 일) ═══
   const dtSection=tab==='current'&&vm==='list'?h('div',{style:{margin:'4px 10px 2px',background:C.card,borderRadius:10,border:'1px solid '+C.border,overflow:'hidden',boxShadow:'0 1px 4px rgba(0,0,0,0.03)'}},
     // Header - toggle
     h('div',{onClick:()=>setShowDtSection(!showDtSection),style:{display:'flex',alignItems:'center',padding:'8px 12px',cursor:'pointer',background:C.card2}},
       h('span',{style:{fontSize:12,marginRight:6}},'☀️'),
       h('span',{style:{fontSize:12,fontWeight:700,color:C.text,flex:1}},'오늘 할 일'),
-      todayDTTotal>0?h('span',{style:{fontSize:10,color:todayDTDone===todayDTTotal&&todayDTTotal>0?C.green:C.accent,fontWeight:600,marginRight:6}},todayDTDone+'/'+todayDTTotal):null,
+      todayDTTotal>0?h('span',{style:{fontSize:10,color:C.accent,fontWeight:600,marginRight:6}},todayDTTotal+'개'):null,
       h('span',{style:{fontSize:10,color:C.text3,transform:showDtSection?'rotate(90deg)':'rotate(0)',transition:'transform 0.2s'}},'▶')
     ),
     showDtSection?h('div',{style:{padding:'6px 12px 8px'}},
-      // Task list
+      // Today's task list
       ...todayDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:'1px solid '+C.border2}},
-        h('button',{onClick:()=>toggleDailyTask(dt.id),style:{width:18,height:18,borderRadius:4,border:dt.done?'none':'2px solid '+C.border,background:dt.done?C.green:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}},dt.done?h('span',{style:{color:'#FFF',fontSize:10,fontWeight:700}},'✓'):null),
-        h('span',{style:{flex:1,fontSize:12,color:dt.done?C.text3:C.text,textDecoration:dt.done?'line-through':'none'}},dt.title),
+        h('button',{onClick:()=>completeDailyTask(dt.id),style:{width:18,height:18,borderRadius:4,border:'2px solid '+C.border,background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}},null),
+        h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
         h('button',{onClick:()=>delDailyTask(dt.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕')
       )),
       // Uncompleted items "move to tomorrow" button
-      todayDT.filter(d=>!d.done).length>0?h('button',{onClick:()=>{
-        const undone=todayDT.filter(d=>!d.done);
-        moveToTomorrow(undone);
-      },style:{width:'100%',padding:'6px',marginTop:4,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기'):null,
+      todayDT.length>0?h('button',{onClick:()=>{moveToTomorrow(todayDT)},
+        style:{width:'100%',padding:'6px',marginTop:4,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기'):null,
+      // Tomorrow's tasks (if any)
+      tomorrowDT.length>0?h('div',{style:{marginTop:8,padding:'6px 0',borderTop:'1px solid '+C.border}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:4}},
+          h('span',{style:{fontSize:10,fontWeight:600,color:C.text3}},'📅 내일 할 일'),
+          h('span',{style:{fontSize:9,color:C.accent,background:C.accent+'12',padding:'1px 5px',borderRadius:8}},tomorrowDT.length+'개'),
+          h('button',{onClick:()=>moveBackToToday(tomorrowDT),style:{marginLeft:'auto',padding:'3px 8px',background:C.accent+'12',border:'1px solid '+C.accent+'30',borderRadius:12,color:C.accent,fontSize:9,fontWeight:600,cursor:'pointer'}},'← 오늘로 되돌리기')
+        ),
+        ...tomorrowDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:6,padding:'3px 0',opacity:.6}},
+          h('span',{style:{fontSize:11,color:C.text2,flex:1}},dt.title),
+          h('button',{onClick:()=>moveBackToToday([dt]),style:{background:'none',border:'none',color:C.accent,fontSize:9,cursor:'pointer'}},'되돌리기')
+        ))
+      ):null,
       // Add input
       h('div',{style:{display:'flex',gap:4,marginTop:6}},
         h('input',{type:'text',placeholder:'오늘 할 일 추가...',value:dtInput,onChange:e=>setDtInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addDailyTask(),style:{flex:1,padding:'7px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
