@@ -12,6 +12,8 @@
 <title>할 일</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif;-webkit-tap-highlight-color:transparent}
 html,body,#root{height:100%;width:100%;overflow:hidden;background:#F5F0EA}
@@ -44,7 +46,7 @@ input[type="color"]::-webkit-color-swatch{border-radius:6px;border:2px solid #D5
 const{useState,useEffect,useCallback,useMemo,useRef,createElement:h}=React;
 const DK=["일","월","화","수","목","금","토"];
 const DTAGS=[{id:"work",name:"업무",color:"#3B82F6"},{id:"personal",name:"개인",color:"#10B981"},{id:"urgent",name:"긴급",color:"#EF4444"}];
-const SK={t:"td4-t",a:"td4-a",g:"td4-g",r:"td4-r",noti:"td4-ni",sort:"td4-sort",dt:"td4-dt",showMS:"td4-sms",showRV:"td4-srv",rvColor:"td4-rvc",st:"td4-st",sr:"td4-sr",sdt:"td4-sdt",sa:"td4-sa",dark:"td4-dark"};
+const SK={t:"td4-t",a:"td4-a",g:"td4-g",r:"td4-r",noti:"td4-ni",sort:"td4-sort",dt:"td4-dt",showMS:"td4-sms",showRV:"td4-srv",rvColor:"td4-rvc",st:"td4-st",sr:"td4-sr",sdt:"td4-sdt",sa:"td4-sa",dark:"td4-dark",fbcfg:"td4-fbc",myCode:"td4-mc",pCode:"td4-pc",myName:"td4-mn"};
 const NOTI_OPTS=[{v:30,l:'30분 전'},{v:60,l:'1시간 전'},{v:120,l:'2시간 전'}];
 function ld(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f}catch(e){return f}}
 function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
@@ -90,6 +92,7 @@ function App(){
   const[nMemo,sNMemo]=useState('');
   const[nCL,sNCL]=useState([]);const[nCLInput,sNCLInput]=useState('');const[nCLOpen,sNCLOpen]=useState(false);
   const[nRepeat,sNRepeat]=useState('none');
+  const[nRepeatEnd,sNRepeatEnd]=useState('');
   const[rT,sRT]=useState('');const[rSD,sRSD]=useState('');const[rED,sRED]=useState('');const[rTg,sRTg]=useState('');
   const[rMemo,sRMemo]=useState('');
   const[showSearch,setShowSearch]=useState(false);const[sq,sSq]=useState('');const[sqDate,sSqDate]=useState('');
@@ -100,7 +103,7 @@ function App(){
   const[eNotiAtD,sENotiAtD]=useState('');const[eNotiAtT,sENotiAtT]=useState('');
   const[eMemo,sEMemo]=useState('');
   const[eCL,sECL]=useState([]);const[eCLInput,sECLInput]=useState('');const[eCLOpen,sECLOpen]=useState(false);
-  const[eRepeat,sERepeat]=useState('none');
+  
   const[editRec,setEditRec]=useState(null);
   const[erT,sERT]=useState('');const[erSD,sERSD]=useState('');const[erED,sERED]=useState('');const[erTg,sERTg]=useState('');
   const[erMemo,sERMemo]=useState('');
@@ -183,24 +186,96 @@ function App(){
     setST:{fontSize:12,fontWeight:600,color:C.text2,marginBottom:10},
     backupBtn:{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'10px',border:'1px solid',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',background:'transparent'},
   };
-  // ★ RECEIVED (공유받은) dummy data — read-only
-  const rcvTodos=useMemo(()=>{
+  // ═══ FIREBASE REALTIME SHARING ═══
+  const[fbConfig,setFbConfig]=useState(()=>ld(SK.fbcfg,null));
+  const[myCode,setMyCode]=useState(()=>ld(SK.myCode,''));
+  const[partnerCode,setPartnerCode]=useState(()=>ld(SK.pCode,''));
+  const[myName,setMyName]=useState(()=>ld(SK.myName,'나'));
+  const[fbConnected,setFbConnected]=useState(false);
+  const[fbError,setFbError]=useState('');
+  const[fbSyncing,setFbSyncing]=useState(false);
+  const[rcvTodosLive,setRcvTodosLive]=useState([]);
+  const[rcvRecordsLive,setRcvRecordsLive]=useState([]);
+  const[rcvArchiveLive,setRcvArchiveLive]=useState([]);
+  const[partnerProfile,setPartnerProfile]=useState(null);
+  const fbRef=useRef(null);
+  const fbWriteTimer=useRef(null);
+
+  const genCode=()=>{const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';for(let i=0;i<6;i++)r+=c[Math.floor(Math.random()*c.length)];return r};
+
+  const saveFbConfig=(cfg)=>{setFbConfig(cfg);sv(SK.fbcfg,cfg)};
+  const saveMyCode=(c)=>{setMyCode(c);sv(SK.myCode,c)};
+  const savePartnerCode=(c)=>{setPartnerCode(c);sv(SK.pCode,c)};
+  const saveMyName=(n)=>{setMyName(n);sv(SK.myName,n)};
+
+  // Initialize Firebase
+  useEffect(()=>{
+    if(!fbConfig){setFbConnected(false);return}
+    try{
+      if(typeof firebase==='undefined'){setFbError('Firebase SDK 로드 실패');return}
+      if(!firebase.apps.length)firebase.initializeApp(fbConfig);
+      fbRef.current=firebase.database();
+      // Test connection
+      const connRef=fbRef.current.ref('.info/connected');
+      connRef.on('value',snap=>{setFbConnected(!!snap.val())});
+      setFbError('');
+    }catch(e){setFbError(e.message);setFbConnected(false)}
+  },[fbConfig]);
+
+  // WRITE: Sync my shared data TO Firebase (debounced)
+  useEffect(()=>{
+    if(!fbConnected||!myCode||!fbRef.current)return;
+    if(fbWriteTimer.current)clearTimeout(fbWriteTimer.current);
+    fbWriteTimer.current=setTimeout(()=>{
+      setFbSyncing(true);
+      fbRef.current.ref('shares/'+myCode).set({
+        profile:{name:myName,updatedAt:new Date().toISOString()},
+        todos:shTodos,records:shRecords,archive:shArchive,dailyTasks:shDailyTasks
+      }).then(()=>setFbSyncing(false)).catch(e=>{console.log('FB write:',e);setFbSyncing(false)});
+    },1500);
+    return()=>{if(fbWriteTimer.current)clearTimeout(fbWriteTimer.current)};
+  },[fbConnected,myCode,myName,shTodos,shRecords,shArchive,shDailyTasks]);
+
+  // READ: Listen to partner's data FROM Firebase
+  useEffect(()=>{
+    if(!fbConnected||!partnerCode||!fbRef.current){
+      setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setPartnerProfile(null);return;
+    }
+    const ref=fbRef.current.ref('shares/'+partnerCode);
+    const handler=ref.on('value',snap=>{
+      const data=snap.val();
+      if(!data){setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setPartnerProfile(null);return}
+      const owner=data.profile?.name||'상대방';
+      setPartnerProfile(data.profile||null);
+      setRcvTodosLive((data.todos||[]).map(t=>({...t,_owner:owner})));
+      setRcvRecordsLive((data.records||[]).map(r=>({...r,_owner:owner})));
+      setRcvArchiveLive((data.archive||[]).map(a=>({...a,_owner:owner})));
+    });
+    return()=>ref.off('value',handler);
+  },[fbConnected,partnerCode]);
+
+  // ★ RECEIVED data: Firebase live → fallback dummy
+  const dummyRcvTodos=useMemo(()=>{
+    if(fbConfig)return[];// Firebase 설정됨 → 더미 안 씀
     const td=new Date(),y=td.getFullYear(),m=td.getMonth(),d=td.getDate();
     return[
-      {id:'rcv1',title:'팀 회의 참석',datetime:new Date(y,m,d+1,10,0).toISOString(),tagId:null,notiOn:false,memo:'회의실 B',createdAt:new Date().toISOString(),_owner:'김민수'},
-      {id:'rcv2',title:'프로젝트 마감일',datetime:new Date(y,m,d+3,18,0).toISOString(),tagId:null,notiOn:false,memo:'최종 보고서 제출',createdAt:new Date().toISOString(),_owner:'김민수'},
-      {id:'rcv3',title:'점심 약속',datetime:new Date(y,m,d,12,30).toISOString(),tagId:null,notiOn:false,memo:'',createdAt:new Date().toISOString(),_owner:'이지은'}
+      {id:'rcv1',title:'팀 회의 참석 (데모)',datetime:new Date(y,m,d+1,10,0).toISOString(),tagId:null,notiOn:false,memo:'회의실 B',createdAt:new Date().toISOString(),_owner:'데모'},
+      {id:'rcv2',title:'프로젝트 마감일 (데모)',datetime:new Date(y,m,d+3,18,0).toISOString(),tagId:null,notiOn:false,memo:'최종 보고서 제출',createdAt:new Date().toISOString(),_owner:'데모'},
     ];
-  },[]);
-  const rcvRecords=useMemo(()=>{
+  },[fbConfig]);
+  const dummyRcvRecords=useMemo(()=>{
+    if(fbConfig)return[];
     const td=new Date(),y=td.getFullYear(),m=td.getMonth(),d=td.getDate();
-    return[
-      {id:'rcvr1',title:'팀 워크숍',startDate:toDS(new Date(y,m,d+2)),endDate:toDS(new Date(y,m,d+4)),tagId:null,memo:'장소: 연수원',createdAt:new Date().toISOString(),_owner:'김민수'}
-    ];
-  },[]);
-  const rcvArchive=useMemo(()=>[
-    {id:'rcva1',title:'지난주 회의록 정리',datetime:new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate()-2,14,0).toISOString(),completedAt:new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate()-1,16,0).toISOString(),tagId:null,memo:'',_owner:'김민수'}
-  ],[]);
+    return[{id:'rcvr1',title:'팀 워크숍 (데모)',startDate:toDS(new Date(y,m,d+2)),endDate:toDS(new Date(y,m,d+4)),tagId:null,memo:'장소: 연수원',createdAt:new Date().toISOString(),_owner:'데모'}];
+  },[fbConfig]);
+  const dummyRcvArchive=useMemo(()=>{
+    if(fbConfig)return[];
+    return[{id:'rcva1',title:'지난주 회의록 정리 (데모)',datetime:new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate()-2,14,0).toISOString(),completedAt:new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate()-1,16,0).toISOString(),tagId:null,memo:'',_owner:'데모'}];
+  },[fbConfig]);
+
+  const rcvTodos=fbConnected&&partnerCode?rcvTodosLive:dummyRcvTodos;
+  const rcvRecords=fbConnected&&partnerCode?rcvRecordsLive:dummyRcvRecords;
+  const rcvArchive=fbConnected&&partnerCode?rcvArchiveLive:dummyRcvArchive;
   useEffect(()=>{
     const onResize=()=>{
       const wide=window.innerWidth>=580;
@@ -437,24 +512,44 @@ function App(){
 
   // ═══ CRUD ═══
   // ★ Repeat helpers
-  const repeatOpts=[{v:'none',l:'없음'},{v:'daily',l:'매일'},{v:'weekdays',l:'평일(월~금)'},{v:'weekly',l:'매주'},{v:'monthly',l:'매월'}];
+  const repeatOpts=[{v:'none',l:'없음'},{v:'daily',l:'매일'},{v:'weekly',l:'매주'},{v:'monthly',l:'매월'}];
   const repeatLabel=r=>{const o=repeatOpts.find(x=>x.v===r);return o?o.l:'없음'};
-  const nextRepeatDT=(dtStr,rp)=>{
-    const d=new Date(dtStr);
-    if(rp==='daily')d.setDate(d.getDate()+1);
-    else if(rp==='weekdays'){do{d.setDate(d.getDate()+1)}while(d.getDay()===0||d.getDay()===6)}
-    else if(rp==='weekly')d.setDate(d.getDate()+7);
-    else if(rp==='monthly')d.setMonth(d.getMonth()+1);
-    return d.toISOString();
+  // ★ Generate ALL repeat instances until endDateStr (or Dec 31 of current year)
+  const genRepeatItems=(baseItem,rp,endDateStr)=>{
+    const items=[];
+    const endDate=endDateStr?new Date(endDateStr+'T23:59:59'):new Date(new Date().getFullYear(),11,31,23,59);
+    const base=new Date(baseItem.datetime);
+    const groupId='rg_'+Date.now();
+    items.push({...baseItem,repeatGroupId:groupId,repeatType:rp,repeatEndDate:endDateStr||null});
+    let cur=new Date(base);
+    let idx=1;
+    while(true){
+      if(rp==='daily')cur.setDate(cur.getDate()+1);
+      else if(rp==='weekly')cur.setDate(cur.getDate()+7);
+      else if(rp==='monthly')cur.setMonth(cur.getMonth()+1);
+      if(cur>endDate)break;
+      if(idx>730)break;
+      items.push({...baseItem,id:baseItem.id+'_'+idx,datetime:cur.toISOString(),repeatGroupId:groupId,repeatType:rp,repeatEndDate:endDateStr||null,checklist:baseItem.checklist?baseItem.checklist.map(c=>({...c,done:false})):[]});
+      idx++;
+    }
+    return items;
   };
   const addTodo=()=>{
     if(!nT.trim())return;
     const dt=nD&&nTi?nD+'T'+nTi:nD?nD+'T00:00':new Date().toISOString();
     const notiAt=(nNotiBefore==='custom'&&nNotiAtD&&nNotiAtT)?nNotiAtD+'T'+nNotiAtT:null;
-    const item={id:Date.now().toString(),title:nT.trim(),memo:nMemo.trim()||'',checklist:nCL.length>0?nCL:[],datetime:dt,tagId:nTg||null,notiOn:nNotiOn,notiBefore:nNotiBefore==='custom'?null:nNotiBefore,notiAt:notiAt,repeat:nRepeat!=='none'?nRepeat:null,createdAt:new Date().toISOString()};
-    if(writeMode==='shared'){sShT([...shTodos,item].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
-    else{sT([...todos,item].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
-    sNT('');sND('');sNTi('');sNTg('');sNMemo('');sNCL([]);sNCLInput('');sNCLOpen(false);sNRepeat('none');sNNotiOn(true);sNNotiBefore(30);sNNotiAtD('');sNNotiAtT('');setShowAdd(false);
+    const base={id:Date.now().toString(),title:nT.trim(),memo:nMemo.trim()||'',checklist:nCL.length>0?nCL:[],datetime:dt,tagId:nTg||null,notiOn:nNotiOn,notiBefore:nNotiBefore==='custom'?null:nNotiBefore,notiAt:notiAt,createdAt:new Date().toISOString()};
+    let newItems;
+    if(nRepeat!=='none'){
+      newItems=genRepeatItems(base,nRepeat,nRepeatEnd);
+    }else{
+      newItems=[base];
+    }
+    if(writeMode==='shared'){sShT([...shTodos,...newItems].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
+    else{sT([...todos,...newItems].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
+    const cnt=newItems.length;
+    sNT('');sND('');sNTi('');sNTg('');sNMemo('');sNCL([]);sNCLInput('');sNCLOpen(false);sNRepeat('none');sNRepeatEnd('');sNNotiOn(true);sNNotiBefore(30);sNNotiAtD('');sNNotiAtT('');setShowAdd(false);
+    if(cnt>1)showToast('🔁 '+repeatLabel(nRepeat)+' '+cnt+'개 일정 생성');
   };
   const completeTodo=(id,src)=>{
     if(src==='received')return;
@@ -462,26 +557,13 @@ function App(){
     setTimeout(()=>{
       if(src==='shared'){
         const t=shTodos.find(x=>x.id===id);
-        if(t){
-          sShA([{...t,completedAt:new Date().toISOString()},...shArchive]);
-          if(t.repeat){
-            const next={...t,id:Date.now().toString(),datetime:nextRepeatDT(t.datetime,t.repeat),checklist:t.checklist?t.checklist.map(c=>({...c,done:false})):[]};
-            sShT([...shTodos.filter(x=>x.id!==id),next].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));
-            showToast('✓ 완료 → 다음 '+repeatLabel(t.repeat)+' 일정 생성');
-          }else{sShT(shTodos.filter(x=>x.id!==id));showToast('✓ 완료 처리됨')}
-        }
+        if(t){sShA([{...t,completedAt:new Date().toISOString()},...shArchive]);sShT(shTodos.filter(x=>x.id!==id))}
       }else{
         const t=todos.find(x=>x.id===id);
-        if(t){
-          sA([{...t,completedAt:new Date().toISOString()},...archive]);
-          if(t.repeat){
-            const next={...t,id:Date.now().toString(),datetime:nextRepeatDT(t.datetime,t.repeat),checklist:t.checklist?t.checklist.map(c=>({...c,done:false})):[]};
-            sT([...todos.filter(x=>x.id!==id),next].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));
-            showToast('✓ 완료 → 다음 '+repeatLabel(t.repeat)+' 일정 생성');
-          }else{sT(todos.filter(x=>x.id!==id));showToast('✓ 완료 처리됨')}
-        }
+        if(t){sA([{...t,completedAt:new Date().toISOString()},...archive]);sT(todos.filter(x=>x.id!==id))}
       }
       setFadingOut(p=>{const n=new Set(p);n.delete(id);return n});
+      showToast('✓ 완료 처리됨');
     },350);
   };
   const restoreTodo=(todo,src)=>{
@@ -502,7 +584,7 @@ function App(){
     sETi(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'));
     sETg(todo.tagId||'');sEMemo(todo.memo||'');sENotiOn(todo.notiOn!==false);
     sECL(todo.checklist||[]);sECLInput('');sECLOpen((todo.checklist||[]).length>0);
-    sERepeat(todo.repeat||'none');
+    // repeat is read-only now;
     setViewOnly(!!readOnly);setEditSource(src||'personal');setEditOrigSrc(src||'personal');
     if(todo.notiAt){
       sENotiBefore('custom');
@@ -519,7 +601,7 @@ function App(){
     const notiAt=(eNotiBefore==='custom'&&eNotiAtD&&eNotiAtT)?eNotiAtD+'T'+eNotiAtT:null;
     const oldKeys=notifiedRef.current.filter(k=>k.startsWith(editTodo.id+'_'));
     if(oldKeys.length>0){notifiedRef.current=notifiedRef.current.filter(k=>!k.startsWith(editTodo.id+'_'));sv(SK.noti,notifiedRef.current)}
-    const updated={...editTodo,title:eT.trim(),memo:eMemo.trim()||'',checklist:eCL,datetime:dt,tagId:eTg||null,notiOn:eNotiOn,notiBefore:eNotiBefore==='custom'?null:eNotiBefore,notiAt:notiAt,repeat:eRepeat!=='none'?eRepeat:null};delete updated._src;
+    const updated={...editTodo,title:eT.trim(),memo:eMemo.trim()||'',checklist:eCL,datetime:dt,tagId:eTg||null,notiOn:eNotiOn,notiBefore:eNotiBefore==='custom'?null:eNotiBefore,notiAt:notiAt};delete updated._src;
     if(editOrigSrc!==editSource){
       // Move between stores
       if(editOrigSrc==='shared'){sShT(shTodos.filter(t=>t.id!==editTodo.id))}else{sT(todos.filter(t=>t.id!==editTodo.id))}
@@ -535,9 +617,23 @@ function App(){
   };
   const delEdit=()=>{
     if(!editTodo||viewOnly)return;
+    const src=editOrigSrc;
+    const list=src==='shared'?shTodos:todos;
+    const setList=src==='shared'?sShT:sT;
     askConfirm('할 일 삭제','"'+editTodo.title+'"을(를) 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.',()=>{
-      if(editOrigSrc==='shared'){sShT(shTodos.filter(t=>t.id!==editTodo.id))}else{sT(todos.filter(t=>t.id!==editTodo.id))}
-      setEditTodo(null);showToast('🗑 삭제됨');
+      setList(list.filter(t=>t.id!==editTodo.id));setEditTodo(null);showToast('🗑 삭제됨');
+    });
+  };
+  const delEditBatch=()=>{
+    if(!editTodo||viewOnly||!editTodo.repeatGroupId)return;
+    const src=editOrigSrc;
+    const list=src==='shared'?shTodos:todos;
+    const setList=src==='shared'?sShT:sT;
+    const gid=editTodo.repeatGroupId;
+    const futureItems=list.filter(t=>t.repeatGroupId===gid&&new Date(t.datetime)>=new Date(editTodo.datetime));
+    askConfirm('일괄 삭제','이 날짜 포함 이후의 반복 일정\n'+futureItems.length+'개를 모두 삭제하시겠습니까?',()=>{
+      setList(list.filter(t=>t.repeatGroupId!==gid||new Date(t.datetime)<new Date(editTodo.datetime)));
+      setEditTodo(null);showToast('🗑 '+futureItems.length+'개 일괄 삭제됨');
     });
   };
 
@@ -814,9 +910,10 @@ function App(){
     h('div',{style:{background:C.card,borderRadius:16,padding:18,maxWidth:340,width:'90%',animation:'scaleIn 0.15s ease',boxShadow:'0 4px 20px rgba(0,0,0,0.15)'},onClick:e=>e.stopPropagation()},
       h('div',{style:{fontSize:15,fontWeight:700,color:C.text,marginBottom:8}},confirm.title),
       h('div',{style:{fontSize:13,color:C.text2,marginBottom:18,whiteSpace:'pre-line',lineHeight:'1.5'}},confirm.msg),
-      h('div',{style:{display:'flex',gap:8}},
-        h('button',{onClick:confirm.onCancel,style:{flex:1,padding:'10px',background:C.bg,color:C.text2,border:'1px solid '+C.border,borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},'취소'),
-        h('button',{onClick:confirm.onOk,style:{flex:1,padding:'10px',background:confirm.okColor||C.red,color:'#FFF',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},confirm.okLabel||'삭제')
+      h('div',{style:{display:'flex',gap:8,flexWrap:confirm.extra?'wrap':'nowrap'}},
+        h('button',{onClick:confirm.onCancel,style:{flex:confirm.extra?'1 1 100%':'1',padding:'10px',background:C.bg,color:C.text2,border:'1px solid '+C.border,borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer',order:confirm.extra?3:0}},'취소'),
+        h('button',{onClick:confirm.onOk,style:{flex:1,padding:'10px',background:confirm.okColor||C.red,color:'#FFF',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},confirm.okLabel||'삭제'),
+        confirm.extra||null
       )
     )
   ):null;
@@ -907,15 +1004,31 @@ function App(){
         // Section: 공유받은 일정 상세 설정
         showReceived?h('div',{style:{marginBottom:16}},
           h('div',{style:{fontSize:10,fontWeight:700,color:C.text3,marginBottom:8,letterSpacing:0.5}},'공유받은 일정 설정'),
-          // 연결된 사람 목록
-          h('div',{style:{padding:10,background:C.card2,borderRadius:8,border:'1px solid '+C.border2,marginBottom:8}},
-            h('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:6}},
-              h('div',{style:{width:32,height:32,borderRadius:'50%',background:rvColor+'20',border:'2px solid '+rvColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}},'👩'),
-              h('div',{style:{flex:1}},
-                h('div',{style:{fontSize:12,fontWeight:600,color:C.text}},'와이프'),
-                h('div',{style:{fontSize:10,color:C.text3}},'Firebase 연결 전 · 데모')
+          // Firebase 연결 상태
+          h('div',{style:{padding:10,background:C.card2,borderRadius:8,border:'1px solid '+(fbConnected?C.green+'30':C.border2),marginBottom:8}},
+            fbConnected&&partnerCode&&partnerProfile?
+              h('div',{style:{display:'flex',alignItems:'center',gap:8}},
+                h('div',{style:{width:32,height:32,borderRadius:'50%',background:rvColor+'20',border:'2px solid '+rvColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}},'👩'),
+                h('div',{style:{flex:1}},
+                  h('div',{style:{fontSize:12,fontWeight:600,color:C.text}},partnerProfile.name||'상대방'),
+                  h('div',{style:{fontSize:10,color:C.green}},'🟢 실시간 연결됨')
+                ),
+                fbSyncing?h('span',{style:{fontSize:9,color:C.accent}},'동기화중...'):null
+              ):
+              fbConnected?h('div',{style:{display:'flex',alignItems:'center',gap:8}},
+                h('span',{style:{fontSize:14}},'🔗'),
+                h('div',{style:{flex:1}},
+                  h('div',{style:{fontSize:12,fontWeight:600,color:C.text}},'Firebase 연결됨'),
+                  h('div',{style:{fontSize:10,color:C.text3}},partnerCode?'상대방 코드: '+partnerCode+' (데이터 대기중)':'⚙️ 설정에서 상대방 코드를 입력하세요')
+                )
+              ):
+              h('div',{style:{display:'flex',alignItems:'center',gap:8}},
+                h('span',{style:{fontSize:14}},fbConfig?'⚠️':'💡'),
+                h('div',{style:{flex:1}},
+                  h('div',{style:{fontSize:12,fontWeight:600,color:C.text}},fbConfig?'연결 시도 중...':'데모 모드'),
+                  h('div',{style:{fontSize:10,color:C.text3}},fbConfig?fbError||'연결 중...':'⚙️ 설정 탭에서 Firebase를 연결하세요')
+                )
               )
-            )
           ),
           // 색상 설정
           h('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'8px 0'}},
@@ -1035,15 +1148,20 @@ function App(){
       h('div',{style:{display:'flex',gap:6}},h('input',{type:'date',value:eD,onChange:e=>sED(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly}),h('input',{type:'time',value:eTi,onChange:e=>sETi(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly})),
       h('select',{value:eTg,onChange:e=>sETg(e.target.value),style:S.input,disabled:viewOnly},h('option',{value:''},'태그 없음'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
       viewOnly?null:notiRow(eNotiOn,sENotiOn,eNotiBefore,sENotiBefore,eNotiAtD,sENotiAtD,eNotiAtT,sENotiAtT),
-      viewOnly?editTodo&&editTodo.repeat?h('div',{style:{fontSize:11,color:C.accent,marginBottom:7}},'🔁 '+repeatLabel(editTodo.repeat)):null:h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:7}},
-        h('span',{style:{fontSize:11,color:C.text2,fontWeight:600}},'🔁 반복'),
-        ...repeatOpts.map(o=>h('button',{key:o.v,onClick:()=>sERepeat(o.v),style:{padding:'4px 8px',borderRadius:14,border:'1px solid '+(eRepeat===o.v?C.accent+'50':C.border),background:eRepeat===o.v?C.accent+'18':'transparent',color:eRepeat===o.v?C.accent:C.text3,fontSize:10,fontWeight:eRepeat===o.v?700:500,cursor:'pointer'}},o.l))
-      ),
+      editTodo&&editTodo.repeatGroupId?h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:7,padding:'6px 10px',background:C.accent+'10',borderRadius:8,border:'1px solid '+C.accent+'20'}},
+        h('span',{style:{fontSize:13}},'🔁'),
+        h('span',{style:{fontSize:11,fontWeight:600,color:C.accent}},repeatLabel(editTodo.repeatType)+' 반복'),
+        h('span',{style:{fontSize:10,color:C.text3}},'(그룹 일정)')
+      ):null,
       h('textarea',{placeholder:'메모',value:eMemo,onChange:e=>sEMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden',background:viewOnly?C.border2:C.bg},readOnly:viewOnly}),
       clUI(eCL,sECL,eCLInput,sECLInput,eCLOpen,sECLOpen,viewOnly),
       viewOnly?h('button',{onClick:()=>{setEditTodo(null);setViewOnly(false)},style:{...S.submitBtn,background:C.text3}},'닫기'):null,
       !viewOnly?h('button',{onClick:saveEdit,style:S.submitBtn},'저장'):null,
-      !viewOnly?h('button',{onClick:delEdit,style:S.delBtn},'삭제'):null
+      !viewOnly&&editTodo&&editTodo.repeatGroupId?h('div',{style:{display:'flex',gap:6,marginTop:5}},
+        h('button',{onClick:delEdit,style:{flex:1,padding:'9px',background:'transparent',color:C.red,border:'1px solid '+C.red+'30',borderRadius:7,fontSize:12,cursor:'pointer'}},'삭제'),
+        h('button',{onClick:delEditBatch,style:{flex:1,padding:'9px',background:C.red,color:'#FFF',border:'none',borderRadius:7,fontSize:12,fontWeight:600,cursor:'pointer'}},'일괄삭제')
+      ):null,
+      !viewOnly&&editTodo&&!editTodo.repeatGroupId?h('button',{onClick:delEdit,style:S.delBtn},'삭제'):null
     )
   ):null;
 
@@ -1148,7 +1266,7 @@ function App(){
           BellI({z:10,c:C.accent+'80'}),
           notiInfo?h('span',{style:{fontSize:8,color:C.accent+'80'}},notiInfo.m+'/'+notiInfo.d+' '+notiInfo.t):null
         ):null,
-        todo.repeat?h('span',{style:{fontSize:8,color:'#8B5CF6',fontWeight:700,flexShrink:0,marginRight:1}},'🔁'):null,
+        todo.repeatType?h('span',{style:{fontSize:8,color:'#8B5CF6',fontWeight:700,flexShrink:0,marginRight:1}},'🔁'):null,
         h('span',{style:{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},todo.title),
         todo.checklist&&todo.checklist.length>0?h('span',{style:{fontSize:8,color:C.green,fontWeight:700,background:C.greenBg,padding:'1px 4px',borderRadius:4,flexShrink:0,marginLeft:2}},todo.checklist.filter(x=>x.done).length+'/'+todo.checklist.length):null,
         isRcv&&todo._owner?h('span',{style:{fontSize:8,color:rvColor,fontWeight:600,flexShrink:0,marginLeft:2}},todo._owner):null,
@@ -1242,10 +1360,15 @@ function App(){
       h('div',{style:{display:'flex',gap:6}},h('input',{type:'date',value:nD,onChange:e=>sND(e.target.value),style:{...S.input,flex:1}}),h('input',{type:'time',value:nTi,onChange:e=>sNTi(e.target.value),style:{...S.input,flex:1}})),
       h('select',{value:nTg,onChange:e=>sNTg(e.target.value),style:S.input},h('option',{value:''},'태그 선택'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
       notiRow(nNotiOn,sNNotiOn,nNotiBefore,sNNotiBefore,nNotiAtD,sNNotiAtD,nNotiAtT,sNNotiAtT),
-      h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:7}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:nRepeat!=='none'?4:7,flexWrap:'wrap'}},
         h('span',{style:{fontSize:11,color:C.text2,fontWeight:600}},'🔁 반복'),
         ...repeatOpts.map(o=>h('button',{key:o.v,onClick:()=>sNRepeat(o.v),style:{padding:'4px 8px',borderRadius:14,border:'1px solid '+(nRepeat===o.v?C.accent+'50':C.border),background:nRepeat===o.v?C.accent+'18':'transparent',color:nRepeat===o.v?C.accent:C.text3,fontSize:10,fontWeight:nRepeat===o.v?700:500,cursor:'pointer'}},o.l))
       ),
+      nRepeat!=='none'?h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:7,padding:'6px 10px',background:C.accent+'08',borderRadius:8,border:'1px solid '+C.accent+'15'}},
+        h('span',{style:{fontSize:10,color:C.accent,fontWeight:600,flexShrink:0}},'종료일'),
+        h('input',{type:'date',value:nRepeatEnd,onChange:e=>sNRepeatEnd(e.target.value),style:{flex:1,padding:'5px 8px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
+        h('span',{style:{fontSize:9,color:C.text3}},nRepeatEnd?'':'미입력 시 연말까지')
+      ):null,
       h('textarea',{placeholder:'메모 (선택)',value:nMemo,onChange:e=>sNMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden'}}),
       clUI(nCL,sNCL,nCLInput,sNCLInput,nCLOpen,sNCLOpen,false),
       h('button',{onClick:addTodo,style:{...S.submitBtn,background:writeMode==='shared'?'#3B82F6':C.accent}},writeMode==='shared'?'📤 공유 추가':'추가')
@@ -1412,7 +1535,7 @@ function App(){
       if(hasDone){streak++;checkDay.setDate(checkDay.getDate()-1)}else break;
     }
     // Repeat task count
-    const repeatCount=[...todos,...shTodos].filter(t=>t.repeat).length;
+    const repeatCount=[...todos,...shTodos].filter(t=>t.repeatType).length;
 
     const statCard=(emoji,label,value,sub,color)=>h('div',{style:{flex:1,minWidth:0,background:C.card,borderRadius:10,padding:'12px 10px',border:'1px solid '+C.border,textAlign:'center',boxShadow:dark?'none':'0 1px 4px rgba(0,0,0,0.03)'}},
       h('div',{style:{fontSize:20,marginBottom:2}},emoji),
@@ -1559,6 +1682,83 @@ function App(){
           h('div',{style:{fontSize:10,color:window.matchMedia('(display-mode: standalone)').matches?C.green:C.accent,fontWeight:600}},window.matchMedia('(display-mode: standalone)').matches?'✓ 설치됨':'미설치')
         )
       ),
+      // ═══ FIREBASE 공유 설정 ═══
+      h('div',{style:S.setS},
+        h('div',{style:S.setST},'🔗 실시간 공유 (Firebase)'),
+        // Connection status
+        h('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:fbConnected?C.green+'10':C.bg,borderRadius:8,border:'1px solid '+(fbConnected?C.green+'30':C.border),marginBottom:10}},
+          h('div',{style:{width:8,height:8,borderRadius:'50%',background:fbConnected?C.green:'#ccc'}}),
+          h('span',{style:{fontSize:12,fontWeight:600,color:fbConnected?C.green:C.text3}},fbConnected?'연결됨':'미연결'),
+          fbSyncing?h('span',{style:{fontSize:10,color:C.accent,marginLeft:'auto'}},'동기화중...'):null
+        ),
+        fbError?h('div',{style:{fontSize:10,color:C.red,marginBottom:8,padding:'6px 8px',background:C.red+'08',borderRadius:6}},'⚠ '+fbError):null,
+        // Step 1: Firebase Config
+        h('div',{style:{marginBottom:12}},
+          h('div',{style:{fontSize:12,fontWeight:600,color:C.text,marginBottom:6}},'① Firebase 프로젝트 연결'),
+          !fbConfig?h('div',null,
+            h('div',{style:{fontSize:10,color:C.text3,marginBottom:8,lineHeight:'1.6'}},
+              '1. Firebase Console (firebase.google.com) 접속\n',
+              '2. 프로젝트 생성 → Realtime Database 활성화\n',
+              '3. 규칙을 {"rules":{".read":true,".write":true}} 로 설정\n',
+              '4. 프로젝트 설정 → 웹앱 추가 → config 복사\n',
+              '5. 아래에 붙여넣기'
+            ),
+            h('textarea',{id:'fb-config-input',placeholder:'Firebase config JSON 붙여넣기\n예: {"apiKey":"...","databaseURL":"...","projectId":"..."}',style:{width:'100%',minHeight:80,padding:8,background:C.bg,border:'1px solid '+C.border,borderRadius:7,color:C.text,fontSize:11,fontFamily:'monospace',outline:'none',resize:'vertical',marginBottom:6}}),
+            h('button',{onClick:()=>{
+              try{
+                const el=document.getElementById('fb-config-input');
+                let cfg=JSON.parse(el.value.trim());
+                if(!cfg.databaseURL&&!cfg.projectId){showToast('⚠ databaseURL 또는 projectId 필요');return}
+                if(!cfg.databaseURL&&cfg.projectId){cfg.databaseURL='https://'+cfg.projectId+'-default-rtdb.firebaseio.com'}
+                saveFbConfig(cfg);
+                if(!myCode){const c=genCode();saveMyCode(c)}
+                showToast('✅ Firebase 연결 설정 완료!');
+              }catch(e){showToast('⚠ JSON 형식이 올바르지 않습니다')}
+            },style:S.submitBtn},'Firebase 연결')
+          ):h('div',null,
+            h('div',{style:{fontSize:11,color:C.green,marginBottom:6}},'✅ Firebase 프로젝트 연결됨'),
+            h('button',{onClick:()=>{
+              askConfirm('Firebase 연결 해제','Firebase 연결을 해제하시겠습니까?\n공유 코드는 유지됩니다.',()=>{
+                saveFbConfig(null);setFbConnected(false);showToast('연결 해제됨');
+              },'해제',C.red);
+            },style:{fontSize:11,color:C.red,background:'none',border:'1px solid '+C.red+'30',borderRadius:6,padding:'4px 10px',cursor:'pointer'}},'연결 해제')
+          )
+        ),
+        // Step 2: My share code
+        fbConfig?h('div',{style:{marginBottom:12,padding:10,background:C.accent+'08',borderRadius:8,border:'1px solid '+C.accent+'20'}},
+          h('div',{style:{fontSize:12,fontWeight:600,color:C.text,marginBottom:6}},'② 내 공유 코드'),
+          h('div',{style:{fontSize:10,color:C.text3,marginBottom:6}},'이 코드를 상대방에게 알려주세요.\n상대방이 이 코드를 입력하면 내 📤공유 일정을 볼 수 있습니다.'),
+          h('div',{style:{display:'flex',alignItems:'center',gap:8}},
+            h('div',{style:{fontSize:20,fontWeight:700,color:C.accent,letterSpacing:3,background:C.card,padding:'8px 16px',borderRadius:8,border:'2px solid '+C.accent+'40',fontFamily:'monospace'}},myCode||'---'),
+            h('button',{onClick:()=>{
+              try{navigator.clipboard.writeText(myCode);showToast('📋 코드 복사됨!')}catch(e){showToast(myCode)}
+            },style:{padding:'8px 12px',background:C.accent,color:'#FFF',border:'none',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer'}},'복사'),
+            h('button',{onClick:()=>{
+              askConfirm('코드 재생성','새 코드를 생성하면 상대방에게 다시 알려야 합니다.\n계속할까요?',()=>{
+                const c=genCode();saveMyCode(c);showToast('새 코드: '+c);
+              },'재생성',C.accent);
+            },style:{padding:'8px 10px',background:'none',border:'1px solid '+C.border,borderRadius:8,fontSize:11,cursor:'pointer',color:C.text3}},'🔄')
+          ),
+          // My name setting
+          h('div',{style:{display:'flex',alignItems:'center',gap:6,marginTop:8}},
+            h('span',{style:{fontSize:11,color:C.text2,flexShrink:0}},'내 이름:'),
+            h('input',{type:'text',value:myName,onChange:e=>saveMyName(e.target.value),style:{flex:1,padding:'5px 8px',background:C.card,border:'1px solid '+C.border,borderRadius:6,fontSize:12,color:C.text,outline:'none'},placeholder:'표시될 이름'})
+          )
+        ):null,
+        // Step 3: Partner code
+        fbConfig?h('div',{style:{marginBottom:12,padding:10,background:rvColor+'08',borderRadius:8,border:'1px solid '+rvColor+'20'}},
+          h('div',{style:{fontSize:12,fontWeight:600,color:C.text,marginBottom:6}},'③ 상대방 코드 입력'),
+          h('div',{style:{fontSize:10,color:C.text3,marginBottom:6}},'상대방이 알려준 코드를 입력하세요.\n입력하면 📥공유받은 일정에 자동으로 표시됩니다.'),
+          h('div',{style:{display:'flex',gap:6}},
+            h('input',{type:'text',value:partnerCode,onChange:e=>savePartnerCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'')),maxLength:6,placeholder:'6자리 코드',style:{flex:1,padding:'8px 12px',background:C.card,border:'1px solid '+C.border,borderRadius:8,fontSize:16,fontWeight:700,color:rvColor,letterSpacing:3,textAlign:'center',fontFamily:'monospace',outline:'none'}}),
+            partnerCode.length===6&&partnerProfile?h('div',{style:{display:'flex',alignItems:'center',gap:4,padding:'4px 8px',background:C.green+'12',borderRadius:8,border:'1px solid '+C.green+'30'}},
+              h('span',{style:{fontSize:11,color:C.green,fontWeight:600}},partnerProfile.name||'연결됨'),
+              h('span',{style:{fontSize:14}},'🟢')
+            ):null
+          ),
+          partnerCode&&!partnerProfile?h('div',{style:{fontSize:10,color:C.text3,marginTop:4}},'⏳ 상대방 데이터 대기 중... (코드가 맞는지 확인하세요)'):null
+        ):null
+      ),
       h('div',{style:S.setS},
         h('div',{style:S.setST},'데이터 백업 / 복원'),
         h('div',{style:{fontSize:11,color:C.text3,marginBottom:10,lineHeight:'1.5'}},'브라우저 캐시를 지우면 데이터가 사라질 수 있습니다.\n정기적으로 백업해두시는 것을 권장합니다.'),
@@ -1569,7 +1769,12 @@ function App(){
       ),
       h('div',{style:S.setS},
         h('div',{style:S.setST},'데이터 현황'),
-        ...[['👤 할 일',todos.length],['👤 완료',archive.length],['👤 기록',records.length],['👤 오늘 할 일',todayDTTotal],['📤 공유 할 일',shTodos.length],['📤 공유 완료',shArchive.length],['📤 공유 기록',shRecords.length],['📥 공유받은 할 일',rcvTodos.length],['📥 공유받은 기록',rcvRecords.length],['태그',tags.length]].map(([l,v])=>h('div',{key:l,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:12,color:C.text2,borderBottom:'1px solid '+C.border2}},h('span',null,l),h('span',{style:{background:l.startsWith('📥')?rvColor+'10':l.startsWith('📤')?'#3B82F610':C.accentBg,color:l.startsWith('📥')?rvColor:l.startsWith('📤')?'#3B82F6':C.accent,fontSize:10,fontWeight:600,padding:'1px 7px',borderRadius:10}},v)))
+        ...[['👤 할 일',todos.length],['👤 완료',archive.length],['👤 기록',records.length],['👤 오늘 할 일',todayDTTotal],['📤 공유 할 일',shTodos.length],['📤 공유 완료',shArchive.length],['📤 공유 기록',shRecords.length],['📥 공유받은 할 일',rcvTodos.length],['📥 공유받은 기록',rcvRecords.length],['🔁 반복 일정',[...todos,...shTodos].filter(t=>t.repeatType).length],['태그',tags.length]].map(([l,v])=>h('div',{key:l,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:12,color:C.text2,borderBottom:'1px solid '+C.border2}},h('span',null,l),h('span',{style:{background:l.startsWith('📥')?rvColor+'10':l.startsWith('📤')?'#3B82F610':C.accentBg,color:l.startsWith('📥')?rvColor:l.startsWith('📤')?'#3B82F6':C.accent,fontSize:10,fontWeight:600,padding:'1px 7px',borderRadius:10}},v))),
+        h('button',{onClick:()=>{
+          askConfirm('전체 데이터 삭제','모든 할 일, 기록, 완료 내역, 태그를\n삭제하시겠습니까?\n\n⚠ 이 작업은 되돌릴 수 없습니다.\n먼저 백업을 권장합니다.',()=>{
+            sT([]);sA([]);sR([]);sTg(DTAGS);sDT([]);sShT([]);sShR([]);sShA([]);sShDT([]);showToast('🗑 전체 데이터 삭제됨');
+          },'전체 삭제');
+        },style:{...S.delBtn,marginTop:12,fontSize:11,padding:'8px'}},'전체 데이터 삭제')
       )
     );
   }
