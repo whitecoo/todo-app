@@ -689,15 +689,19 @@ function App(){
     if(src==='shared'){sShDT(shDailyTasks.filter(d=>d.id!==id))}
     else{sDT(dailyTasks.filter(d=>d.id!==id))}
   };
-  const moveToTomorrow=(items)=>{
+  const moveToTomorrow=(pItems,sItems)=>{
     const tmrw=new Date(td);tmrw.setDate(tmrw.getDate()+1);const tmrwDS=toDS(tmrw);
-    sDT(dailyTasks.map(d=>items.find(i=>i.id===d.id)?{...d,date:tmrwDS,done:false}:d));
+    if(pItems&&pItems.length)sDT(dailyTasks.map(d=>pItems.find(i=>i.id===d.id)?{...d,date:tmrwDS,done:false}:d));
+    if(sItems&&sItems.length)sShDT(shDailyTasks.map(d=>sItems.find(i=>i.id===d.id)?{...d,date:tmrwDS,done:false}:d));
+    const cnt=(pItems?pItems.length:0)+(sItems?sItems.length:0);
     setShowYesterdayPrompt(false);
-    showToast('→ '+items.length+'개를 내일로 옮겼습니다');
+    showToast('→ '+cnt+'개를 내일로 옮겼습니다');
   };
-  const moveBackToToday=(items)=>{
-    sDT(dailyTasks.map(d=>items.find(i=>i.id===d.id)?{...d,date:todayDS,done:false}:d));
-    showToast('← '+items.length+'개를 오늘로 되돌렸습니다');
+  const moveBackToToday=(pItems,sItems)=>{
+    if(pItems&&pItems.length)sDT(dailyTasks.map(d=>pItems.find(i=>i.id===d.id)?{...d,date:todayDS,done:false}:d));
+    if(sItems&&sItems.length)sShDT(shDailyTasks.map(d=>sItems.find(i=>i.id===d.id)?{...d,date:todayDS,done:false}:d));
+    const cnt=(pItems?pItems.length:0)+(sItems?sItems.length:0);
+    showToast('← '+cnt+'개를 오늘로 되돌렸습니다');
   };
   const moveAllToToday=()=>{
     sDT(dailyTasks.map(d=>yesterdayItems.find(i=>i.id===d.id)?{...d,date:todayDS,done:false}:d));
@@ -911,7 +915,7 @@ function App(){
           !readOnly?h('button',{onClick:()=>delItem(item.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕'):null
         )),
         !readOnly?h('div',{style:{display:'flex',gap:4,marginTop:4}},
-          h('input',{type:'text',placeholder:'항목 추가...',value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();const el=e.target;addItem();requestAnimationFrame(()=>el.focus())}},style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
+          h('input',{type:'text',placeholder:'항목 추가...',value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();const el=e.target;addItem();setTimeout(()=>{el.focus()},50)}},style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'},autoComplete:'off'}),
           h('button',{onClick:addItem,style:{padding:'6px 10px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
         ):null
       ):null
@@ -1410,7 +1414,7 @@ function App(){
     ...yesterdayItems.map(it=>h('div',{key:it.id,style:{fontSize:11,color:C.text2,padding:'3px 0',paddingLeft:22,borderBottom:'1px solid #FFE8C8'}},'• '+it.title)),
     h('div',{style:{display:'flex',gap:6,marginTop:8}},
       h('button',{onClick:moveAllToToday,style:{flex:1,padding:'8px',background:C.accent,color:'#FFF',border:'none',borderRadius:7,fontSize:12,fontWeight:600,cursor:'pointer'}},'오늘로 옮기기'),
-      h('button',{onClick:()=>{moveToTomorrow(yesterdayItems)},style:{flex:1,padding:'8px',background:'transparent',color:C.text2,border:'1px solid '+C.border,borderRadius:7,fontSize:12,fontWeight:500,cursor:'pointer'}},'내일로'),
+      h('button',{onClick:()=>{moveToTomorrow(yesterdayItems,null)},style:{flex:1,padding:'8px',background:'transparent',color:C.text2,border:'1px solid '+C.border,borderRadius:7,fontSize:12,fontWeight:500,cursor:'pointer'}},'내일로'),
       h('button',{onClick:()=>setShowYesterdayPrompt(false),style:{padding:'8px 12px',background:'transparent',color:C.text3,border:'1px solid '+C.border,borderRadius:7,fontSize:11,cursor:'pointer'}},'무시')
     )
   ):null;
@@ -1418,6 +1422,8 @@ function App(){
   // Tomorrow's daily tasks
   const tmrw=new Date(td);tmrw.setDate(tmrw.getDate()+1);const tmrwDS=toDS(tmrw);
   const tomorrowDT=dailyTasks.filter(d=>d.date===tmrwDS);
+  const shTomorrowDT=shDailyTasks.filter(d=>d.date===tmrwDS);
+  const allTomorrowDT=[...tomorrowDT.map(d=>({...d,_src:'personal'})),...shTomorrowDT.map(d=>({...d,_src:'shared'}))];
 
   // ═══ TAG FILTER ROW ═══
   const tagFilterRow=tab==='current'&&vm==='list'?h('div',{style:{display:'flex',gap:4,padding:'6px 12px 2px',overflowX:'auto',WebkitOverflowScrolling:'touch'}},
@@ -1463,20 +1469,21 @@ function App(){
         h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
         dt._owner?h('span',{style:{fontSize:9,color:rvColor,fontWeight:500,flexShrink:0}},dt._owner):null
       )),
-      // Move to tomorrow button
-      todayDT.length>0?h('button',{onClick:()=>{moveToTomorrow(todayDT)},
-        style:{width:'100%',padding:'6px',marginTop:4,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기'):null,
-      // ③ Tomorrow's tasks (맨 아래)
-      tomorrowDT.length>0?h('div',{style:{marginTop:8,padding:'8px',borderTop:'1px solid '+C.border,background:'#F0EDFF',borderRadius:8}},
+      // Move to tomorrow button (개인+공유 모두)
+      (todayDT.length>0||shDTToday.length>0)?h('button',{onClick:()=>{moveToTomorrow(todayDT,shDTToday)},
+        style:{width:'100%',padding:'6px',marginTop:4,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기 ('+(todayDT.length+shDTToday.length)+'개)'):null,
+      // Tomorrow's tasks (개인+공유 통합)
+      allTomorrowDT.length>0?h('div',{style:{marginTop:8,padding:'8px',borderTop:'1px solid '+C.border,background:'#F0EDFF',borderRadius:8}},
         h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:6}},
           h('span',{style:{fontSize:11,fontWeight:700,color:'#6366F1'}},'📅 내일 할 일'),
-          h('span',{style:{fontSize:10,color:'#FFF',background:'#6366F1',padding:'1px 6px',borderRadius:8,fontWeight:700}},tomorrowDT.length+'개')
+          h('span',{style:{fontSize:10,color:'#FFF',background:'#6366F1',padding:'1px 6px',borderRadius:8,fontWeight:700}},allTomorrowDT.length+'개')
         ),
-        ...tomorrowDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:6,padding:'4px 0',borderBottom:'1px solid #E0DDFA'}},
-          h('span',{style:{fontSize:11,color:C.text,flex:1}},dt.title),
-          h('button',{onClick:()=>moveBackToToday([dt]),style:{padding:'4px 10px',background:'#6366F1',color:'#FFF',border:'none',borderRadius:12,fontSize:10,fontWeight:700,cursor:'pointer'}},'← 오늘로')
+        ...allTomorrowDT.map(dt=>h('div',{key:(dt._src==='shared'?'sh_':'')+dt.id,style:{display:'flex',alignItems:'center',gap:6,padding:'4px 0',borderBottom:'1px solid #E0DDFA'}},
+          dt._src==='shared'?h('span',{style:{fontSize:9,color:'#3B82F6',fontWeight:700,flexShrink:0}},'📤'):null,
+          h('span',{style:{flex:1,fontSize:11,color:C.text}},dt.title),
+          h('button',{onClick:()=>{dt._src==='shared'?moveBackToToday(null,[dt]):moveBackToToday([dt],null)},style:{padding:'4px 10px',background:'#6366F1',color:'#FFF',border:'none',borderRadius:12,fontSize:10,fontWeight:700,cursor:'pointer'}},'← 오늘로')
         )),
-        h('button',{onClick:()=>moveBackToToday(tomorrowDT),style:{width:'100%',padding:'8px',marginTop:6,background:'#6366F1',color:'#FFF',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer'}},'← 전체 오늘로 되돌리기')
+        h('button',{onClick:()=>moveBackToToday(tomorrowDT,shTomorrowDT),style:{width:'100%',padding:'8px',marginTop:6,background:'#6366F1',color:'#FFF',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer'}},'← 전체 오늘로 되돌리기')
       ):null
     ):null
   ):null;
@@ -1860,20 +1867,21 @@ function App(){
               h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
               dt._owner?h('span',{style:{fontSize:9,color:rvColor,fontWeight:500,flexShrink:0}},dt._owner):null
             )),
-            todayDT.length>0?h('button',{onClick:()=>{moveToTomorrow(todayDT)},style:{width:'100%',padding:'5px',marginTop:3,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기'):null
+            (todayDT.length>0||shDTToday.length>0)?h('button',{onClick:()=>{moveToTomorrow(todayDT,shDTToday)},style:{width:'100%',padding:'5px',marginTop:3,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기 ('+(todayDT.length+shDTToday.length)+'개)'):null
           ),
-          // Right: tomorrow tasks
-          tomorrowDT.length>0?h('div',{style:{flex:1,minWidth:200}},
+          // Right: tomorrow tasks (개인+공유 통합)
+          allTomorrowDT.length>0?h('div',{style:{flex:1,minWidth:200}},
             h('div',{style:{padding:'6px 8px',background:'#F0EDFF',borderRadius:8}},
               h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:4}},
                 h('span',{style:{fontSize:11,fontWeight:700,color:'#6366F1'}},'📅 내일 할 일'),
-                h('span',{style:{fontSize:10,color:'#FFF',background:'#6366F1',padding:'1px 6px',borderRadius:8,fontWeight:700}},tomorrowDT.length+'개')
+                h('span',{style:{fontSize:10,color:'#FFF',background:'#6366F1',padding:'1px 6px',borderRadius:8,fontWeight:700}},allTomorrowDT.length+'개')
               ),
-              ...tomorrowDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:6,padding:'3px 0',borderBottom:'1px solid #E0DDFA'}},
+              ...allTomorrowDT.map(dt=>h('div',{key:(dt._src==='shared'?'sh_':'')+dt.id,style:{display:'flex',alignItems:'center',gap:6,padding:'3px 0',borderBottom:'1px solid #E0DDFA'}},
+                dt._src==='shared'?h('span',{style:{fontSize:9,color:'#3B82F6',fontWeight:700,flexShrink:0}},'📤'):null,
                 h('span',{style:{fontSize:11,color:C.text,flex:1}},dt.title),
-                h('button',{onClick:()=>moveBackToToday([dt]),style:{padding:'3px 8px',background:'#6366F1',color:'#FFF',border:'none',borderRadius:12,fontSize:10,fontWeight:700,cursor:'pointer'}},'← 오늘로')
+                h('button',{onClick:()=>{dt._src==='shared'?moveBackToToday(null,[dt]):moveBackToToday([dt],null)},style:{padding:'3px 8px',background:'#6366F1',color:'#FFF',border:'none',borderRadius:12,fontSize:10,fontWeight:700,cursor:'pointer'}},'← 오늘로')
               )),
-              tomorrowDT.length>1?h('button',{onClick:()=>moveBackToToday(tomorrowDT),style:{width:'100%',padding:'6px',marginTop:4,background:'#6366F1',color:'#FFF',border:'none',borderRadius:7,fontSize:11,fontWeight:700,cursor:'pointer'}},'← 전체 오늘로 되돌리기'):null
+              allTomorrowDT.length>1?h('button',{onClick:()=>moveBackToToday(tomorrowDT,shTomorrowDT),style:{width:'100%',padding:'6px',marginTop:4,background:'#6366F1',color:'#FFF',border:'none',borderRadius:7,fontSize:11,fontWeight:700,cursor:'pointer'}},'← 전체 오늘로 되돌리기'):null
             )
           ):null
         )
