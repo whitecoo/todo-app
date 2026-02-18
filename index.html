@@ -915,7 +915,7 @@ function App(){
           !readOnly?h('button',{onClick:()=>delItem(item.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕'):null
         )),
         !readOnly?h('div',{style:{display:'flex',gap:4,marginTop:4}},
-          h('input',{type:'text',placeholder:'항목 추가...',value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();const el=e.target;addItem();setTimeout(()=>{el.focus()},50)}},style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'},autoComplete:'off'}),
+          h('input',{'data-cl-input':'1',type:'text',placeholder:'항목 추가...',value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();addItem();setTimeout(()=>{const inp=document.querySelector('[data-cl-input]');if(inp)inp.focus()},120)}},style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'},autoComplete:'off'}),
           h('button',{onClick:addItem,style:{padding:'6px 10px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
         ):null
       ):null
