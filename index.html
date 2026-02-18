@@ -1055,25 +1055,26 @@ function App(){
     )
   );
 
-  // ★ Wide layout for Fold5 - column-first fill
+  // ★ Wide layout for Fold5 - always 2 columns, left-first fill
   if(isWide&&tab==='current'&&vm==='list'){
     const itemCount=unifiedList.length;
-    const useTwoCol=itemCount>=5;
-    const rowCount=Math.ceil(itemCount/2);
+    // rowCount must be >= 2 so small counts fill left first
+    // 2 items → 2 rows → both left | 3 items → 2 rows → 2 left, 1 right
+    const rowCount=Math.max(2,Math.ceil(itemCount/2));
     return h('div',{style:{...S.root,maxWidth:780}},
       header,searchP,yesterdayPrompt,
       h('div',{style:{padding:'0 6px'}},dtSection),
       h('div',{style:{...S.content}},
         !itemCount&&!showAdd&&todayDTTotal===0?h('div',{style:S.empty},h('div',{style:{fontSize:32,marginBottom:8}},'✓'),h('div',{style:{fontSize:13,color:C.text2}},'할 일이 없습니다'),h('div',{style:{fontSize:11,marginTop:4,color:C.text3}},'+ 버튼으로 추가')):null,
-        itemCount>0?h('div',{style:useTwoCol?{
+        itemCount>0?h('div',{style:{
           display:'grid',
           gridTemplateColumns:'1fr 1fr',
           gridAutoFlow:'column',
           gridTemplateRows:'repeat('+rowCount+', auto)'
-        }:{/* 1열: 그냥 세로 나열 */}},
-          ...unifiedList.map((item,i)=>h('div',{key:'w'+(item.type==='todo'?'t_':'r_')+item.data.id,style:useTwoCol?{
+        }},
+          ...unifiedList.map((item,i)=>h('div',{key:'w'+(item.type==='todo'?'t_':'r_')+item.data.id,style:{
             borderRight:i<rowCount?'1px solid '+C.border:'none'
-          }:{}},
+          }},
             item.type==='todo'?todoEl(item.data):recEl(item.data)
           ))
         ):null,
