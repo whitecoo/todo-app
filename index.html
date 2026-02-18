@@ -896,10 +896,11 @@ function App(){
       ):null
     );
 
-  // ═══ Checklist UI (접이식) ═══
-  const clUI=(items,setItems,input,setInput,open,setOpen,readOnly)=>{
+  // ═══ Checklist UI (접이식) - 비제어 input으로 모바일 키보드 유지 ═══
+  const clUI=(items,setItems,open,setOpen,readOnly,uid)=>{
     const done=items.filter(x=>x.done).length,total=items.length;
-    const addItem=()=>{if(!input.trim())return;setItems([...items,{id:Date.now().toString(),text:input.trim(),done:false}]);setInput('')};
+    const inputId='cl-inp-'+uid;
+    const addItem=()=>{const el=document.getElementById(inputId);const val=el?el.value.trim():'';if(!val)return;setItems([...items,{id:Date.now().toString(),text:val,done:false}]);if(el)el.value=''};
     const toggleItem=id=>readOnly?null:setItems(items.map(x=>x.id===id?{...x,done:!x.done}:x));
     const delItem=id=>readOnly?null:setItems(items.filter(x=>x.id!==id));
     return h('div',{style:{marginBottom:7}},
@@ -915,7 +916,7 @@ function App(){
           !readOnly?h('button',{onClick:()=>delItem(item.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕'):null
         )),
         !readOnly?h('div',{style:{display:'flex',gap:4,marginTop:4}},
-          h('input',{'data-cl-input':'1',type:'text',placeholder:'항목 추가...',value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();addItem();setTimeout(()=>{const inp=document.querySelector('[data-cl-input]');if(inp)inp.focus()},120)}},style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'},autoComplete:'off'}),
+          h('input',{id:inputId,type:'text',placeholder:'항목 추가...',onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();addItem()}},style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'},autoComplete:'off',enterKeyHint:'done'}),
           h('button',{onClick:addItem,style:{padding:'6px 10px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
         ):null
       ):null
@@ -1170,7 +1171,7 @@ function App(){
         h('span',{style:{fontSize:10,color:C.text3}},'(그룹 일정)')
       ):null,
       h('textarea',{placeholder:'메모',value:eMemo,onChange:e=>sEMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden',background:viewOnly?C.border2:C.bg},readOnly:viewOnly}),
-      clUI(eCL,sECL,eCLInput,sECLInput,eCLOpen,sECLOpen,viewOnly),
+      clUI(eCL,sECL,eCLOpen,sECLOpen,viewOnly,'edit'),
       viewOnly?h('button',{onClick:()=>{setEditTodo(null);setViewOnly(false)},style:{...S.submitBtn,background:C.text3}},'닫기'):null,
       !viewOnly?h('button',{onClick:saveEdit,style:S.submitBtn},'저장'):null,
       !viewOnly&&editTodo&&editTodo.repeatGroupId?h('div',{style:{display:'flex',gap:6,marginTop:5}},
@@ -1386,7 +1387,7 @@ function App(){
         h('span',{style:{fontSize:9,color:C.text3}},nRepeatEnd?'':'미입력 시 연말까지')
       ):null,
       h('textarea',{placeholder:'메모 (선택)',value:nMemo,onChange:e=>sNMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden'}}),
-      clUI(nCL,sNCL,nCLInput,sNCLInput,nCLOpen,sNCLOpen,false),
+      clUI(nCL,sNCL,nCLOpen,sNCLOpen,false,'new'),
       h('button',{onClick:addTodo,style:{...S.submitBtn,background:writeMode==='shared'?'#3B82F6':C.accent}},writeMode==='shared'?'📤 공유 추가':'추가')
     ):h('div',null,
       h('input',{type:'text',placeholder:'기록 제목 (예: 부모님 해외여행)',value:rT,onChange:e=>sRT(e.target.value),style:S.input,autoFocus:true,onKeyDown:e=>e.key==='Enter'&&addRecord()}),
