@@ -304,6 +304,10 @@ function App(){
     if(cleaned.length!==notifiedRef.current.length){notifiedRef.current=cleaned;sv(SK.noti,cleaned)}
   },[todos]);
 
+  // ═══ CORE DATE REFERENCES ═══
+  const td=new Date();
+  const todayDS=toDS(td);
+
   // ═══ CRUD ═══
   const addTodo=()=>{
     if(!nT.trim())return;
@@ -322,10 +326,17 @@ function App(){
     },350);
   };
   const restoreTodo=todo=>{
-    const restored={...todo};delete restored.completedAt;
-    sT([...todos,restored].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));
-    sA(archive.filter(x=>x.id!==todo.id||(x.completedAt!==todo.completedAt)));
-    showToast('↩ 할 일로 복구됨');
+    if(todo.isDailyTask){
+      // Restore to daily tasks (today)
+      sDT([...dailyTasks,{id:Date.now().toString(),title:todo.title,done:false,date:todayDS}]);
+      sA(archive.filter(x=>x.id!==todo.id||(x.completedAt!==todo.completedAt)));
+      showToast('↩ 오늘 할 일로 복구됨');
+    }else{
+      const restored={...todo};delete restored.completedAt;
+      sT([...todos,restored].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)));
+      sA(archive.filter(x=>x.id!==todo.id||(x.completedAt!==todo.completedAt)));
+      showToast('↩ 할 일로 복구됨');
+    }
   };
   const openEdit=(todo,e)=>{
     if(e)e.stopPropagation();const d=new Date(todo.datetime);
@@ -377,9 +388,7 @@ function App(){
   };
 
   // ═══ DAILY TASKS (오늘 할 일) ═══
-  const td=new Date();
   const sDT=useCallback(dt=>{setDailyTasks(dt);sv(SK.dt,dt)},[]);
-  const todayDS=toDS(td);
   const todayDT=dailyTasks.filter(d=>d.date===todayDS);
   const todayDTTotal=todayDT.length;
 
@@ -892,16 +901,16 @@ function App(){
       todayDT.length>0?h('button',{onClick:()=>{moveToTomorrow(todayDT)},
         style:{width:'100%',padding:'6px',marginTop:4,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기'):null,
       // Tomorrow's tasks (if any)
-      tomorrowDT.length>0?h('div',{style:{marginTop:8,padding:'6px 0',borderTop:'1px solid '+C.border}},
-        h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:4}},
-          h('span',{style:{fontSize:10,fontWeight:600,color:C.text3}},'📅 내일 할 일'),
-          h('span',{style:{fontSize:9,color:C.accent,background:C.accent+'12',padding:'1px 5px',borderRadius:8}},tomorrowDT.length+'개'),
-          h('button',{onClick:()=>moveBackToToday(tomorrowDT),style:{marginLeft:'auto',padding:'3px 8px',background:C.accent+'12',border:'1px solid '+C.accent+'30',borderRadius:12,color:C.accent,fontSize:9,fontWeight:600,cursor:'pointer'}},'← 오늘로 되돌리기')
+      tomorrowDT.length>0?h('div',{style:{marginTop:8,padding:'8px',borderTop:'1px solid '+C.border,background:'#F0EDFF',borderRadius:8}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:6}},
+          h('span',{style:{fontSize:11,fontWeight:700,color:'#6366F1'}},'📅 내일 할 일'),
+          h('span',{style:{fontSize:10,color:'#FFF',background:'#6366F1',padding:'1px 6px',borderRadius:8,fontWeight:700}},tomorrowDT.length+'개')
         ),
-        ...tomorrowDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:6,padding:'3px 0',opacity:.6}},
-          h('span',{style:{fontSize:11,color:C.text2,flex:1}},dt.title),
-          h('button',{onClick:()=>moveBackToToday([dt]),style:{background:'none',border:'none',color:C.accent,fontSize:9,cursor:'pointer'}},'되돌리기')
-        ))
+        ...tomorrowDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:6,padding:'4px 0',borderBottom:'1px solid #E0DDFA'}},
+          h('span',{style:{fontSize:11,color:C.text,flex:1}},dt.title),
+          h('button',{onClick:()=>moveBackToToday([dt]),style:{padding:'4px 10px',background:'#6366F1',color:'#FFF',border:'none',borderRadius:12,fontSize:10,fontWeight:700,cursor:'pointer'}},'← 오늘로')
+        )),
+        h('button',{onClick:()=>moveBackToToday(tomorrowDT),style:{width:'100%',padding:'8px',marginTop:6,background:'#6366F1',color:'#FFF',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer'}},'← 전체 오늘로 되돌리기')
       ):null,
       // Add input
       h('div',{style:{display:'flex',gap:4,marginTop:6}},
@@ -1043,25 +1052,17 @@ function App(){
 
   // ★ Wide layout for Fold5
   if(isWide&&tab==='current'&&vm==='list'){
-    const leftItems=sortMode==='type'?unifiedList.filter(i=>i.type==='todo'):unifiedList.filter((_,i)=>i<Math.ceil(unifiedList.length/2));
-    const rightItems=sortMode==='type'?unifiedList.filter(i=>i.type==='record'):unifiedList.filter((_,i)=>i>=Math.ceil(unifiedList.length/2));
     return h('div',{style:{...S.root,maxWidth:780}},
       header,searchP,yesterdayPrompt,
       h('div',{style:{padding:'0 6px'}},dtSection),
-      h('div',{style:{...S.content,display:'flex',gap:0}},
-        h('div',{style:{flex:1,borderRight:'1px solid '+C.border,overflowY:'auto',paddingBottom:66}},
-          sortMode==='type'?h('div',{style:{padding:'8px 14px 4px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'📝 할 일 · '+todos.length+'개')
-            :h('div',{style:{padding:'8px 14px 4px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},sortLabel+' (1/2)'),
-          leftItems.length===0&&!showAdd?h('div',{style:{...S.empty,height:'30vh'}},h('div',{style:{fontSize:24,marginBottom:6}},'✓'),h('div',{style:{fontSize:12,color:C.text2}},'항목 없음')):null,
-          ...leftItems.map(renderUnifiedItem),
-          addF
-        ),
-        h('div',{style:{flex:1,overflowY:'auto',paddingBottom:66}},
-          sortMode==='type'?h('div',{style:{padding:'8px 14px 4px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'📋 기록 · '+activeRecords.length+'개')
-            :h('div',{style:{padding:'8px 14px 4px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},sortLabel+' (2/2)'),
-          rightItems.length===0?h('div',{style:{...S.empty,height:'30vh'}},h('div',{style:{fontSize:24,marginBottom:6}},'📋'),h('div',{style:{fontSize:12,color:C.text2}},'항목 없음')):null,
-          ...rightItems.map(renderUnifiedItem)
-        )
+      h('div',{style:{...S.content}},
+        !unifiedList.length&&!showAdd&&todayDTTotal===0?h('div',{style:S.empty},h('div',{style:{fontSize:32,marginBottom:8}},'✓'),h('div',{style:{fontSize:13,color:C.text2}},'할 일이 없습니다'),h('div',{style:{fontSize:11,marginTop:4,color:C.text3}},'+ 버튼으로 추가')):null,
+        unifiedList.length>0?h('div',{style:{columnCount:2,columnGap:0,columnRule:'1px solid '+C.border}},
+          ...unifiedList.map(item=>h('div',{key:(item.type==='todo'?'t_':'r_')+item.data.id,style:{breakInside:'avoid',WebkitColumnBreakInside:'avoid'}},
+            item.type==='todo'?todoEl(item.data):recEl(item.data)
+          ))
+        ):null,
+        addF
       ),
       fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,nav
     );
