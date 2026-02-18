@@ -896,11 +896,11 @@ function App(){
       ):null
     );
 
-  // ═══ Checklist UI (접이식) - 비제어 input으로 모바일 키보드 유지 ═══
+  // ═══ Checklist UI (접이식) ═══
   const clUI=(items,setItems,open,setOpen,readOnly,uid)=>{
     const done=items.filter(x=>x.done).length,total=items.length;
     const inputId='cl-inp-'+uid;
-    const addItem=()=>{const el=document.getElementById(inputId);const val=el?el.value.trim():'';if(!val)return;setItems([...items,{id:Date.now().toString(),text:val,done:false}]);if(el)el.value=''};
+    const addFromInput=()=>{const el=document.getElementById(inputId);if(!el)return;const val=el.value.trim();if(!val)return;setItems([...items,{id:Date.now().toString(),text:val,done:false}]);el.value=''};
     const toggleItem=id=>readOnly?null:setItems(items.map(x=>x.id===id?{...x,done:!x.done}:x));
     const delItem=id=>readOnly?null:setItems(items.filter(x=>x.id!==id));
     return h('div',{style:{marginBottom:7}},
@@ -915,9 +915,9 @@ function App(){
           h('span',{style:{flex:1,fontSize:12,color:item.done?C.text3:C.text,textDecoration:item.done?'line-through':'none'}},item.text),
           !readOnly?h('button',{onClick:()=>delItem(item.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕'):null
         )),
-        !readOnly?h('div',{style:{display:'flex',gap:4,marginTop:4}},
-          h('input',{id:inputId,type:'text',placeholder:'항목 추가...',onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();addItem()}},style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'},autoComplete:'off',enterKeyHint:'done'}),
-          h('button',{onClick:addItem,style:{padding:'6px 10px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
+        !readOnly?h('div',{key:'cl-input-'+uid,style:{display:'flex',gap:4,marginTop:4}},
+          h('input',{id:inputId,type:'text',placeholder:'항목 추가...',onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();addFromInput()}},style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'},autoComplete:'off'}),
+          h('button',{onClick:addFromInput,style:{padding:'6px 10px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
         ):null
       ):null
     );
