@@ -4,7 +4,6 @@
   "description": "할 일 관리 및 기록 앱",
   "start_url": "./index.html",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#F5F0EA",
   "theme_color": "#F5F0EA",
   "icons": [

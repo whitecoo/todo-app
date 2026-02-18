@@ -112,12 +112,18 @@ function App(){
   useEffect(()=>{
     const onResize=()=>{setIsWide(window.innerWidth>=580)};
     window.addEventListener('resize',onResize);
-    window.addEventListener('orientationchange',()=>setTimeout(onResize,300));
-    // Samsung Fold unfold detection
+    const onOrient=()=>setTimeout(onResize,300);
+    window.addEventListener('orientationchange',onOrient);
+    let screenOrient=null;
     if(window.screen?.orientation){
-      window.screen.orientation.addEventListener('change',()=>setTimeout(onResize,300));
+      screenOrient=window.screen.orientation;
+      screenOrient.addEventListener('change',onOrient);
     }
-    return()=>{window.removeEventListener('resize',onResize)};
+    return()=>{
+      window.removeEventListener('resize',onResize);
+      window.removeEventListener('orientationchange',onOrient);
+      if(screenOrient)screenOrient.removeEventListener('change',onOrient);
+    };
   },[]);
 
   // Close sort menu on outside click
@@ -387,7 +393,7 @@ function App(){
   const addTag=()=>{if(!nTgN.trim())return;sTg([...tags,{id:Date.now().toString(),name:nTgN.trim(),color:nTgC}]);sNTgN('');sNTgC('#6366F1')};
   const delTag=id=>{
     const tg=tags.find(t=>t.id===id);
-    askConfirm('태그 삭제','"'+(tg?tg.name:'')+'\" 태그를 삭제하시겠습니까?',()=>{
+    askConfirm('태그 삭제','"'+(tg?tg.name:'')+'" 태그를 삭제하시겠습니까?',()=>{
       sTg(tags.filter(t=>t.id!==id));showToast('🗑 태그 삭제됨');
     });
   };
@@ -410,11 +416,6 @@ function App(){
     // Remove from daily tasks
     sDT(dailyTasks.filter(d=>d.id!==id));
     showToast('✓ 완료 → 과거 탭으로 이동');
-  };
-  const undoDailyTask=id=>{
-    const item=dailyTasks.find(d=>d.id===id);
-    if(!item)return;
-    sDT(dailyTasks.map(d=>d.id===id?{...d,done:false}:d));
   };
   const delDailyTask=id=>sDT(dailyTasks.filter(d=>d.id!==id));
   const moveToTomorrow=(items)=>{
@@ -705,7 +706,6 @@ function App(){
 
   // ═══ CALENDAR VIEW ═══
   const CW=100/7;
-  const recForDay=useMemo(()=>{const mp={};recForMonth.forEach(r=>{const s=localDate(r.startDate),e=localDate(r.endDate),mS=new Date(cm.y,cm.m,1),mE=new Date(cm.y,cm.m+1,0);const f=s<mS?1:s.getDate(),t=e>mE?mE.getDate():e.getDate();for(let d=f;d<=t;d++){if(!mp[d])mp[d]=[];mp[d].push(r)}});return mp},[recForMonth,cm]);
   const calView=h('div',{style:{padding:'0 6px',overflowY:'auto',WebkitOverflowScrolling:'touch',flex:1}},
     h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 4px 6px',position:'sticky',top:0,background:C.bg,zIndex:3}},
       h('button',{onClick:pM,style:S.cNav},CL({z:15,c:C.text2})),
@@ -1055,30 +1055,46 @@ function App(){
     )
   );
 
-  // ★ Wide layout for Fold5 - always 2 columns, left-first fill
+  // ★ Wide layout for Fold5 - Left: 할일 | Right: 과거
   if(isWide&&tab==='current'&&vm==='list'){
-    const itemCount=unifiedList.length;
-    // rowCount must be >= 2 so small counts fill left first
-    // 2 items → 2 rows → both left | 3 items → 2 rows → 2 left, 1 right
-    const rowCount=Math.max(2,Math.ceil(itemCount/2));
+    const hasPast=archive.length>0||pastRecords.length>0;
     return h('div',{style:{...S.root,maxWidth:780}},
-      header,searchP,yesterdayPrompt,
-      h('div',{style:{padding:'0 6px'}},dtSection),
-      h('div',{style:{...S.content}},
-        !itemCount&&!showAdd&&todayDTTotal===0?h('div',{style:S.empty},h('div',{style:{fontSize:32,marginBottom:8}},'✓'),h('div',{style:{fontSize:13,color:C.text2}},'할 일이 없습니다'),h('div',{style:{fontSize:11,marginTop:4,color:C.text3}},'+ 버튼으로 추가')):null,
-        itemCount>0?h('div',{style:{
-          display:'grid',
-          gridTemplateColumns:'1fr 1fr',
-          gridAutoFlow:'column',
-          gridTemplateRows:'repeat('+rowCount+', auto)'
-        }},
-          ...unifiedList.map((item,i)=>h('div',{key:'w'+(item.type==='todo'?'t_':'r_')+item.data.id,style:{
-            borderRight:i<rowCount?'1px solid '+C.border:'none'
-          }},
-            item.type==='todo'?todoEl(item.data):recEl(item.data)
-          ))
-        ):null,
-        addF
+      header,searchP,
+      h('div',{style:{...S.content,display:'flex',gap:0}},
+        // ═══ LEFT COLUMN: 오늘 할 일 + 현재 리스트 ═══
+        h('div',{style:{flex:1,minWidth:0,overflowY:'auto',borderRight:'1px solid '+C.border}},
+          yesterdayPrompt,
+          dtSection,
+          !unifiedList.length&&!showAdd&&todayDTTotal===0?h('div',{style:{...S.empty,height:'30vh'}},h('div',{style:{fontSize:28,marginBottom:6}},'✓'),h('div',{style:{fontSize:12,color:C.text2}},'할 일이 없습니다')):null,
+          sortMode==='type'&&unifiedList.length>0?h('div',null,
+            activeRecords.length>0?h('div',null,
+              h('div',{style:{padding:'8px 14px 4px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'📋 기록 · '+activeRecords.length+'개'),
+              ...unifiedList.filter(i=>i.type==='record').map(renderUnifiedItem)
+            ):null,
+            todos.length>0?h('div',null,
+              h('div',{style:{padding:'8px 14px 4px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'📝 할 일 · '+todos.length+'개'),
+              ...unifiedList.filter(i=>i.type==='todo').map(renderUnifiedItem)
+            ):null
+          ):null,
+          sortMode!=='type'&&unifiedList.length>0?h('div',null,...unifiedList.map(renderUnifiedItem)):null,
+          addF
+        ),
+        // ═══ RIGHT COLUMN: 과거 (완료 + 지난 기록) ═══
+        h('div',{style:{flex:1,minWidth:0,overflowY:'auto'}},
+          h('div',{style:{padding:'8px 12px 4px',background:C.card2,borderBottom:'1px solid '+C.border2,position:'sticky',top:0,zIndex:2}},
+            h('span',{style:{fontSize:11,fontWeight:700,color:C.text2}},'✅ 과거'),
+            h('span',{style:{fontSize:10,color:C.text3,marginLeft:6}},archive.length+'개 완료'+(pastRecords.length?' · '+pastRecords.length+'개 지난 기록':''))
+          ),
+          !hasPast?h('div',{style:{...S.empty,height:'30vh'}},h('div',{style:{fontSize:28,marginBottom:6}},'📋'),h('div',{style:{fontSize:12,color:C.text2}},'완료 항목 없음')):null,
+          pastRecords.length>0?h('div',null,
+            h('div',{style:{padding:'6px 14px 2px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'📋 지난 기록'),
+            ...pastRecords.map(pastRecEl)
+          ):null,
+          archive.length>0?h('div',null,
+            pastRecords.length>0?h('div',{style:{padding:'6px 14px 2px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'✅ 완료된 할 일'):null,
+            ...archive.map(arcEl)
+          ):null
+        )
       ),
       fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,nav
     );
