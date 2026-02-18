@@ -110,7 +110,12 @@ function App(){
   const[yesterdayItems,setYesterdayItems]=useState([]);
 
   useEffect(()=>{
-    const onResize=()=>{setIsWide(window.innerWidth>=580)};
+    const onResize=()=>{
+      const wide=window.innerWidth>=580;
+      setIsWide(wide);
+      // Wide mode: auto-switch from archive tab (since it's visible in split view)
+      if(wide)setTab(p=>p==='archive'?'current':p);
+    };
     window.addEventListener('resize',onResize);
     const onOrient=()=>setTimeout(onResize,300);
     window.addEventListener('orientationchange',onOrient);
@@ -896,16 +901,21 @@ function App(){
       h('span',{style:{fontSize:10,color:C.text3,transform:showDtSection?'rotate(90deg)':'rotate(0)',transition:'transform 0.2s'}},'▶')
     ),
     showDtSection?h('div',{style:{padding:'6px 12px 8px'}},
-      // Today's task list
+      // ① Add input (항상 맨 위)
+      h('div',{style:{display:'flex',gap:4,marginBottom:6}},
+        h('input',{type:'text',placeholder:'오늘 할 일 추가...',value:dtInput,onChange:e=>setDtInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addDailyTask(),style:{flex:1,padding:'7px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
+        h('button',{onClick:addDailyTask,style:{padding:'7px 12px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
+      ),
+      // ② Today's task list
       ...todayDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:'1px solid '+C.border2}},
         h('button',{onClick:()=>completeDailyTask(dt.id),style:{width:18,height:18,borderRadius:4,border:'2px solid '+C.border,background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}},null),
         h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
         h('button',{onClick:()=>delDailyTask(dt.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕')
       )),
-      // Uncompleted items "move to tomorrow" button
+      // Move to tomorrow button
       todayDT.length>0?h('button',{onClick:()=>{moveToTomorrow(todayDT)},
         style:{width:'100%',padding:'6px',marginTop:4,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기'):null,
-      // Tomorrow's tasks (if any)
+      // ③ Tomorrow's tasks (맨 아래)
       tomorrowDT.length>0?h('div',{style:{marginTop:8,padding:'8px',borderTop:'1px solid '+C.border,background:'#F0EDFF',borderRadius:8}},
         h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:6}},
           h('span',{style:{fontSize:11,fontWeight:700,color:'#6366F1'}},'📅 내일 할 일'),
@@ -916,12 +926,7 @@ function App(){
           h('button',{onClick:()=>moveBackToToday([dt]),style:{padding:'4px 10px',background:'#6366F1',color:'#FFF',border:'none',borderRadius:12,fontSize:10,fontWeight:700,cursor:'pointer'}},'← 오늘로')
         )),
         h('button',{onClick:()=>moveBackToToday(tomorrowDT),style:{width:'100%',padding:'8px',marginTop:6,background:'#6366F1',color:'#FFF',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer'}},'← 전체 오늘로 되돌리기')
-      ):null,
-      // Add input
-      h('div',{style:{display:'flex',gap:4,marginTop:6}},
-        h('input',{type:'text',placeholder:'오늘 할 일 추가...',value:dtInput,onChange:e=>setDtInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addDailyTask(),style:{flex:1,padding:'7px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
-        h('button',{onClick:addDailyTask,style:{padding:'7px 12px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
-      )
+      ):null
     ):null
   ):null;
 
@@ -1055,10 +1060,19 @@ function App(){
     )
   );
 
-  // ★ Wide layout for Fold5 - Top: 오늘 할일 (full width) | Bottom: Left 할일 | Right 과거
+  // Wide nav for Fold5 - only 현재+설정 (과거 is already visible in split view)
+  const wideNav=h('div',{style:S.nav},
+    ...[['current','📝','현재'],['settings','⚙️','설정']].map(([k,ic,lb])=>
+      h('button',{key:k,onClick:()=>{setTab(k);setShowSearch(false);sSq('');setShowSortMenu(false)},style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,background:'none',border:'none',cursor:'pointer',padding:'5px 0'}},
+        h('span',{style:{fontSize:17}},ic),h('span',{style:{fontSize:9,fontWeight:500,color:tab===k?C.accent:C.text3}},lb)
+      )
+    )
+  );
+
+  // ★ Wide layout for Fold5
   if(isWide&&tab==='current'&&vm==='list'){
     const hasPast=archive.length>0||pastRecords.length>0;
-    // Wide version of daily tasks section - flush, no floating margin
+    // Wide version of daily tasks section - input always on top
     const dtSectionWide=h('div',{style:{background:C.card,borderBottom:'1px solid '+C.border,overflow:'hidden'}},
       h('div',{onClick:()=>setShowDtSection(!showDtSection),style:{display:'flex',alignItems:'center',padding:'7px 14px',cursor:'pointer',background:C.card2,borderBottom:'1px solid '+C.border2}},
         h('span',{style:{fontSize:12,marginRight:6}},'☀️'),
@@ -1066,47 +1080,65 @@ function App(){
         todayDTTotal>0?h('span',{style:{fontSize:10,color:C.accent,fontWeight:600,marginRight:6}},todayDTTotal+'개'):null,
         h('span',{style:{fontSize:10,color:C.text3,transform:showDtSection?'rotate(90deg)':'rotate(0)',transition:'transform 0.2s'}},'▶')
       ),
-      showDtSection?h('div',{style:{padding:'6px 14px 8px',display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}},
-        // Left part: task items
-        h('div',{style:{flex:1,minWidth:200}},
-          ...todayDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderBottom:'1px solid '+C.border2}},
-            h('button',{onClick:()=>completeDailyTask(dt.id),style:{width:18,height:18,borderRadius:4,border:'2px solid '+C.border,background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}},null),
-            h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
-            h('button',{onClick:()=>delDailyTask(dt.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕')
-          )),
-          todayDT.length>0?h('button',{onClick:()=>{moveToTomorrow(todayDT)},style:{width:'100%',padding:'5px',marginTop:3,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기'):null
+      showDtSection?h('div',{style:{padding:'6px 14px 8px'}},
+        // ① Add input (항상 맨 위)
+        h('div',{style:{display:'flex',gap:4,marginBottom:6}},
+          h('input',{type:'text',placeholder:'오늘 할 일 추가...',value:dtInput,onChange:e=>setDtInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addDailyTask(),style:{flex:1,padding:'7px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
+          h('button',{onClick:addDailyTask,style:{padding:'7px 12px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
         ),
-        // Right part: tomorrow + input
-        h('div',{style:{flex:1,minWidth:200}},
-          tomorrowDT.length>0?h('div',{style:{padding:'6px 8px',background:'#F0EDFF',borderRadius:8,marginBottom:6}},
-            h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:4}},
-              h('span',{style:{fontSize:11,fontWeight:700,color:'#6366F1'}},'📅 내일 할 일'),
-              h('span',{style:{fontSize:10,color:'#FFF',background:'#6366F1',padding:'1px 6px',borderRadius:8,fontWeight:700}},tomorrowDT.length+'개')
-            ),
-            ...tomorrowDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:6,padding:'3px 0',borderBottom:'1px solid #E0DDFA'}},
-              h('span',{style:{fontSize:11,color:C.text,flex:1}},dt.title),
-              h('button',{onClick:()=>moveBackToToday([dt]),style:{padding:'3px 8px',background:'#6366F1',color:'#FFF',border:'none',borderRadius:12,fontSize:10,fontWeight:700,cursor:'pointer'}},'← 오늘로')
+        // ② Today tasks + Tomorrow in flex row
+        h('div',{style:{display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}},
+          // Left: today tasks
+          h('div',{style:{flex:1,minWidth:200}},
+            ...todayDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderBottom:'1px solid '+C.border2}},
+              h('button',{onClick:()=>completeDailyTask(dt.id),style:{width:18,height:18,borderRadius:4,border:'2px solid '+C.border,background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}},null),
+              h('span',{style:{flex:1,fontSize:12,color:C.text}},dt.title),
+              h('button',{onClick:()=>delDailyTask(dt.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕')
             )),
-            tomorrowDT.length>1?h('button',{onClick:()=>moveBackToToday(tomorrowDT),style:{width:'100%',padding:'6px',marginTop:4,background:'#6366F1',color:'#FFF',border:'none',borderRadius:7,fontSize:11,fontWeight:700,cursor:'pointer'}},'← 전체 오늘로 되돌리기'):null
-          ):null,
-          h('div',{style:{display:'flex',gap:4}},
-            h('input',{type:'text',placeholder:'오늘 할 일 추가...',value:dtInput,onChange:e=>setDtInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addDailyTask(),style:{flex:1,padding:'7px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
-            h('button',{onClick:addDailyTask,style:{padding:'7px 12px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
-          )
+            todayDT.length>0?h('button',{onClick:()=>{moveToTomorrow(todayDT)},style:{width:'100%',padding:'5px',marginTop:3,background:'transparent',border:'1px dashed '+C.accent+'50',borderRadius:6,color:C.accent,fontSize:10,fontWeight:600,cursor:'pointer'}},'→ 못 한 일 내일로 옮기기'):null
+          ),
+          // Right: tomorrow tasks
+          tomorrowDT.length>0?h('div',{style:{flex:1,minWidth:200}},
+            h('div',{style:{padding:'6px 8px',background:'#F0EDFF',borderRadius:8}},
+              h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:4}},
+                h('span',{style:{fontSize:11,fontWeight:700,color:'#6366F1'}},'📅 내일 할 일'),
+                h('span',{style:{fontSize:10,color:'#FFF',background:'#6366F1',padding:'1px 6px',borderRadius:8,fontWeight:700}},tomorrowDT.length+'개')
+              ),
+              ...tomorrowDT.map(dt=>h('div',{key:dt.id,style:{display:'flex',alignItems:'center',gap:6,padding:'3px 0',borderBottom:'1px solid #E0DDFA'}},
+                h('span',{style:{fontSize:11,color:C.text,flex:1}},dt.title),
+                h('button',{onClick:()=>moveBackToToday([dt]),style:{padding:'3px 8px',background:'#6366F1',color:'#FFF',border:'none',borderRadius:12,fontSize:10,fontWeight:700,cursor:'pointer'}},'← 오늘로')
+              )),
+              tomorrowDT.length>1?h('button',{onClick:()=>moveBackToToday(tomorrowDT),style:{width:'100%',padding:'6px',marginTop:4,background:'#6366F1',color:'#FFF',border:'none',borderRadius:7,fontSize:11,fontWeight:700,cursor:'pointer'}},'← 전체 오늘로 되돌리기'):null
+            )
+          ):null
         )
       ):null
     );
 
     return h('div',{style:{...S.root,maxWidth:780}},
       header,searchP,
-      // ═══ TOP: 어제 프롬프트 + 오늘 할 일 (전체 너비) ═══
       yesterdayPrompt,
       dtSectionWide,
-      // ═══ BOTTOM: 좌우 분할 ═══
+      // ═══ 좌우 분할: 왼쪽=과거 | 오른쪽=할일 ═══
       h('div',{style:{flex:1,display:'flex',overflow:'hidden'}},
-        // LEFT: 할 일 리스트
+        // LEFT: 과거 리스트
         h('div',{style:{flex:1,minWidth:0,overflowY:'auto',borderRight:'1px solid '+C.border,paddingBottom:66,WebkitOverflowScrolling:'touch'}},
-          // Column header
+          h('div',{style:{padding:'6px 14px 4px',background:C.card2,borderBottom:'1px solid '+C.border2,position:'sticky',top:0,zIndex:2}},
+            h('span',{style:{fontSize:11,fontWeight:700,color:C.text2}},'✅ 과거'),
+            h('span',{style:{fontSize:10,color:C.text3,marginLeft:6}},archive.length+'개 완료'+(pastRecords.length?' · '+pastRecords.length+'개 지난 기록':''))
+          ),
+          !hasPast?h('div',{style:{...S.empty,height:'25vh'}},h('div',{style:{fontSize:28,marginBottom:6}},'📋'),h('div',{style:{fontSize:12,color:C.text2}},'완료 항목 없음')):null,
+          pastRecords.length>0?h('div',null,
+            h('div',{style:{padding:'6px 14px 2px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'📋 지난 기록'),
+            ...pastRecords.map(pastRecEl)
+          ):null,
+          archive.length>0?h('div',null,
+            pastRecords.length>0?h('div',{style:{padding:'6px 14px 2px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'✅ 완료된 할 일'):null,
+            ...archive.map(arcEl)
+          ):null
+        ),
+        // RIGHT: 할 일 리스트
+        h('div',{style:{flex:1,minWidth:0,overflowY:'auto',paddingBottom:66,WebkitOverflowScrolling:'touch'}},
           h('div',{style:{padding:'6px 14px 4px',background:C.card2,borderBottom:'1px solid '+C.border2,position:'sticky',top:0,zIndex:2}},
             h('span',{style:{fontSize:11,fontWeight:700,color:C.text2}},'📝 현재'),
             h('span',{style:{fontSize:10,color:C.text3,marginLeft:6}},todos.length+'개 할 일'+(activeRecords.length?' · '+activeRecords.length+'개 기록':''))
@@ -1124,29 +1156,13 @@ function App(){
           ):null,
           sortMode!=='type'&&unifiedList.length>0?h('div',null,...unifiedList.map(renderUnifiedItem)):null,
           addF
-        ),
-        // RIGHT: 과거 리스트
-        h('div',{style:{flex:1,minWidth:0,overflowY:'auto',paddingBottom:66,WebkitOverflowScrolling:'touch'}},
-          h('div',{style:{padding:'6px 14px 4px',background:C.card2,borderBottom:'1px solid '+C.border2,position:'sticky',top:0,zIndex:2}},
-            h('span',{style:{fontSize:11,fontWeight:700,color:C.text2}},'✅ 과거'),
-            h('span',{style:{fontSize:10,color:C.text3,marginLeft:6}},archive.length+'개 완료'+(pastRecords.length?' · '+pastRecords.length+'개 지난 기록':''))
-          ),
-          !hasPast?h('div',{style:{...S.empty,height:'25vh'}},h('div',{style:{fontSize:28,marginBottom:6}},'📋'),h('div',{style:{fontSize:12,color:C.text2}},'완료 항목 없음')):null,
-          pastRecords.length>0?h('div',null,
-            h('div',{style:{padding:'6px 14px 2px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'📋 지난 기록'),
-            ...pastRecords.map(pastRecEl)
-          ):null,
-          archive.length>0?h('div',null,
-            pastRecords.length>0?h('div',{style:{padding:'6px 14px 2px',fontSize:10,fontWeight:600,color:C.text3,letterSpacing:.5}},'✅ 완료된 할 일'):null,
-            ...archive.map(arcEl)
-          ):null
         )
       ),
-      fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,nav
+      fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,wideNav
     );
   }
 
-  return h('div',{style:{...S.root,maxWidth:isWide?780:480}},header,searchP,h('div',{style:S.content},content),fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,nav);
+  return h('div',{style:{...S.root,maxWidth:isWide?780:480}},header,searchP,h('div',{style:S.content},content),fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,isWide?wideNav:nav);
 }
 
 const S={
