@@ -683,6 +683,17 @@ function App(){
     if(showReceived)addToMap(rcvTodos,'received');
     return mp;
   },[todos,shTodos,rcvTodos,cm,showMyShared,showReceived]);
+  // ★ Archive items for calendar (completed todos)
+  const afd=useMemo(()=>{
+    const mp={};
+    const addToMap=(list,src)=>list.forEach(t=>{
+      const d=new Date(t.datetime);
+      if(d.getFullYear()===cm.y&&d.getMonth()===cm.m){const dy=d.getDate();if(!mp[dy])mp[dy]=[];mp[dy].push({...t,_src:src})}
+    });
+    addToMap(archive,'personal');
+    if(showMyShared)addToMap(shArchive,'shared');
+    return mp;
+  },[archive,shArchive,cm,showMyShared]);
   const recForMonth=useMemo(()=>{
     const mS=new Date(cm.y,cm.m,1),mE=new Date(cm.y,cm.m+1,0);
     const filt=list=>list.filter(r=>{const s=localDate(r.startDate),e=localDate(r.endDate);return s<=mE&&e>=mS});
@@ -758,7 +769,7 @@ function App(){
           !readOnly?h('button',{onClick:()=>delItem(item.id),style:{background:'none',border:'none',color:C.text3,fontSize:10,cursor:'pointer',padding:'2px 4px',opacity:.5}},'✕'):null
         )),
         !readOnly?h('div',{style:{display:'flex',gap:4,marginTop:4}},
-          h('input',{type:'text',placeholder:'항목 추가...',value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&addItem(),style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
+          h('input',{type:'text',placeholder:'항목 추가...',value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();const el=e.target;addItem();requestAnimationFrame(()=>el.focus())}},style:{flex:1,padding:'6px 10px',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:12,outline:'none'}}),
           h('button',{onClick:addItem,style:{padding:'6px 10px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}},'+')
         ):null
       ):null
@@ -1037,10 +1048,13 @@ function App(){
           const it=isT(day);const dw=new Date(cm.y,cm.m,day).getDay();
           // ★ Todos for this day sorted by time
           const dayTodos=(tfd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
+          const dayDone=(afd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
           return h('div',{key:day,style:{minHeight:22+barGap,padding:'2px 1px',borderRadius:4,background:it?C.accent+'0C':'transparent',border:it?'1px solid '+C.accent+'35':'1px solid transparent',borderBottom:'1px solid '+C.border2+'60'}},
             h('div',{style:{fontSize:10,fontWeight:it?700:400,color:it?C.accent:dw===0?C.red:dw===6?'#3B82F6':C.text2,textAlign:'center',marginBottom:barGap||1}},day),
             // Todos sorted by time (records are shown as bars above, no duplication)
-            ...dayTodos.map(t=>{const tg=gT(t.tagId);const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const bgClr=isRcv?rvColor+'15':isSh?'#3B82F615':tg?tg.color+'15':C.border2;const txtClr=isRcv?rvColor:tg?tg.color:C.text2;const bdrL=isRcv?'2px solid '+rvColor:isSh?'2px solid #3B82F6':'none';return h('div',{key:'ct'+t.id+(t._src||''),onClick:e=>openEdit(t,e,isRcv,t._src),style:{fontSize:6,lineHeight:'8px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:bgClr,color:txtClr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',display:'flex',gap:1,borderLeft:bdrL}},h('span',{style:{color:C.text3,fontSize:6,flexShrink:0}},f.t),h('span',null,t.title))})
+            ...dayTodos.map(t=>{const tg=gT(t.tagId);const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const bgClr=isRcv?rvColor+'15':isSh?'#3B82F615':tg?tg.color+'15':C.border2;const txtClr=isRcv?rvColor:tg?tg.color:C.text2;const bdrL=isRcv?'2px solid '+rvColor:isSh?'2px solid #3B82F6':'none';return h('div',{key:'ct'+t.id+(t._src||''),onClick:e=>openEdit(t,e,isRcv,t._src),style:{fontSize:6,lineHeight:'8px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:bgClr,color:txtClr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',display:'flex',gap:1,borderLeft:bdrL}},h('span',{style:{color:C.text3,fontSize:6,flexShrink:0}},f.t),h('span',null,t.title))}),
+            // ★ Completed todos with strikethrough
+            ...dayDone.map(t=>{const f=fmt(t.datetime);return h('div',{key:'cd'+t.id+(t.completedAt||''),style:{fontSize:6,lineHeight:'8px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:C.greenBg,color:C.green,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',gap:1,opacity:.5,textDecoration:'line-through'}},h('span',{style:{fontSize:6,flexShrink:0}},f.t),h('span',{style:{textDecoration:'line-through'}},t.title))})
           )
         }),
         ...barSlots.flatMap((slot,si)=>slot.map(bar=>{
@@ -1168,7 +1182,7 @@ function App(){
   };
 
   // ═══ ADD FORM ═══
-  const addF=showAdd?h('div',{style:S.addForm},
+  const addFormInner=h('div',{style:isWide?{width:'100%',maxWidth:420,background:C.card,borderRadius:16,padding:18,animation:'scaleIn 0.15s ease',boxShadow:'0 4px 24px rgba(0,0,0,'+(dark?'0.4':'0.15')+')'}:S.addForm},
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
       h('div',{style:{display:'flex',gap:0,background:C.border2,borderRadius:7,padding:2}},
         h('button',{onClick:()=>setAddMode('todo'),style:{...S.segBtn,background:addMode==='todo'?C.card:'transparent',color:addMode==='todo'?C.text:C.text3}},'할 일'),
@@ -1200,7 +1214,8 @@ function App(){
       h('textarea',{placeholder:'메모 (선택)',value:rMemo,onChange:e=>sRMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden'}}),
       h('button',{onClick:addRecord,style:{...S.submitBtn,background:writeMode==='shared'?'#3B82F6':C.accent}},writeMode==='shared'?'📤 공유 추가':'추가')
     )
-  ):null;
+  );
+  const addF=showAdd?(isWide?h('div',{style:S.overlay,onClick:()=>setShowAdd(false)},h('div',{onClick:e=>e.stopPropagation(),style:{position:'absolute',top:60,left:'50%',transform:'translateX(-50%)'}},addFormInner)):addFormInner):null;
 
   const fab=!showAdd&&tab==='current'?h('button',{onClick:()=>setShowAdd(true),style:S.fab},'+'):null;
   const fileInput=h('input',{ref:fileInputRef,type:'file',accept:'.json',style:{display:'none'},onChange:handleImport});
