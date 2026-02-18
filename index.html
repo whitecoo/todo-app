@@ -84,7 +84,7 @@ function App(){
   const[nMemo,sNMemo]=useState('');
   const[rT,sRT]=useState('');const[rSD,sRSD]=useState('');const[rED,sRED]=useState('');const[rTg,sRTg]=useState('');
   const[rMemo,sRMemo]=useState('');
-  const[showSearch,setShowSearch]=useState(false);const[sq,sSq]=useState('');
+  const[showSearch,setShowSearch]=useState(false);const[sq,sSq]=useState('');const[sqDate,sSqDate]=useState('');
   const[nTgN,sNTgN]=useState('');const[nTgC,sNTgC]=useState('#6366F1');
   const[editTodo,setEditTodo]=useState(null);
   const[eT,sET]=useState('');const[eD,sED]=useState('');const[eTi,sETi]=useState('');const[eTg,sETg]=useState('');
@@ -492,7 +492,18 @@ function App(){
   };
 
   // Search
-  const sf=i=>{if(!sq.trim())return true;const q=sq.toLowerCase(),tg=gT(i.tagId);return i.title.toLowerCase().includes(q)||(i.memo&&i.memo.toLowerCase().includes(q))||(tg&&tg.name.toLowerCase().includes(q))};
+  const hasSearch=sq.trim()||sqDate;
+  const sf=i=>{
+    if(!hasSearch)return true;
+    const q=sq.trim().toLowerCase(),tg=gT(i.tagId);
+    const textMatch=!q||(i.title.toLowerCase().includes(q)||(i.memo&&i.memo.toLowerCase().includes(q))||(tg&&tg.name.toLowerCase().includes(q)));
+    if(!sqDate)return textMatch;
+    // Date match
+    let dateMatch=false;
+    if(i.startDate&&i.endDate){dateMatch=i.startDate<=sqDate&&i.endDate>=sqDate}
+    else if(i.datetime){dateMatch=toDS(new Date(i.datetime))===sqDate}
+    return textMatch&&dateMatch;
+  };
   const sTo=todos.filter(sf),sAr=archive.filter(sf),sRc=records.filter(sf);
   const hl=(t,q)=>{if(!q.trim())return t;const i=t.toLowerCase().indexOf(q.toLowerCase());if(i===-1)return t;return h('span',null,t.slice(0,i),h('span',{style:{color:C.accent,fontWeight:700}},t.slice(i,i+q.length)),t.slice(i+q.length))};
 
@@ -657,7 +668,7 @@ function App(){
           )
         ):null
       ):null,
-      h('button',{onClick:()=>{setShowSearch(!showSearch);sSq('')},style:{...S.hBtn,borderColor:showSearch?C.accent:C.border}},SI({z:17,c:showSearch?C.accent:C.text2}))
+      h('button',{onClick:()=>{setShowSearch(!showSearch);sSq('');sSqDate('')},style:{...S.hBtn,borderColor:showSearch?C.accent:C.border}},SI({z:17,c:showSearch?C.accent:C.text2}))
     ),
     h('div',{style:{display:'flex',justifyContent:'center',alignItems:'center',gap:8,marginTop:4}},
       h('span',{style:S.hCount},tab==='current'?(todos.length+'개 할 일'+(activeRecords.length?' · '+activeRecords.length+'개 기록':'')+(todayDTTotal?' · 오늘 '+todayDTTotal+'개':'')+(pastRecords.length?' · 지난 '+pastRecords.length:''))
@@ -672,18 +683,25 @@ function App(){
   // ═══ SEARCH ═══
   const searchP=showSearch?h('div',{style:S.sPanel},
     h('div',{style:S.sWrap},SI({z:14,c:C.text3}),h('input',{type:'text',placeholder:'검색...',value:sq,onChange:e=>sSq(e.target.value),style:S.sInput,autoFocus:true}),sq?h('button',{onClick:()=>sSq(''),style:{background:'none',border:'none',color:C.text3,fontSize:12,cursor:'pointer'}},'✕'):null),
-    sq.trim()?h('div',{style:{padding:'4px 0'}},
+    // ★ Date search row
+    h('div',{style:{display:'flex',alignItems:'center',gap:6,padding:'4px 14px 6px',borderBottom:'1px solid '+C.border2}},
+      CalI({z:13,c:C.text3}),
+      h('input',{type:'date',value:sqDate,onChange:e=>sSqDate(e.target.value),style:{flex:1,background:'none',border:'none',outline:'none',color:C.text,fontSize:12,fontFamily:'inherit'}}),
+      sqDate?h('button',{onClick:()=>sSqDate(''),style:{background:'none',border:'none',color:C.text3,fontSize:11,cursor:'pointer'}},'✕'):null,
+      sqDate?h('span',{style:{fontSize:10,color:C.accent,fontWeight:600}},sqDate.replace(/-/g,'.')):null
+    ),
+    hasSearch?h('div',{style:{padding:'4px 0'}},
       h('div',{style:{padding:'4px 16px 8px'}},
         h('div',{style:{display:'flex',alignItems:'center',gap:5,marginBottom:4}},h('span',{style:{width:6,height:6,borderRadius:'50%',background:C.accent}}),h('span',{style:{fontSize:10,fontWeight:600,color:C.text3,flex:1}},'할 일'),h('span',{style:{fontSize:9,color:C.text3,background:C.card,padding:'1px 5px',borderRadius:6}},sTo.length)),
-        sTo.length===0?h('div',{style:{fontSize:10,color:C.text3,fontStyle:'italic'}},'없음'):sTo.map(t=>{const f=fmt(t.datetime),tg=gT(t.tagId);return h('div',{key:t.id,onClick:e=>{openEdit(t,e);setShowSearch(false);sSq('')},style:{display:'flex',alignItems:'center',padding:'4px 0',borderBottom:'1px solid '+C.border2,gap:6,cursor:'pointer'}},h('span',{style:{fontSize:10,color:C.text3,minWidth:55}},f.m+'/'+f.d+' '+f.t),h('span',{style:{fontSize:12,color:C.text,flex:1}},hl(t.title,sq)),tg?h('span',{style:{...S.tSm,background:tg.color+'15',color:tg.color,borderColor:tg.color+'30'}},tg.name):null)})
+        sTo.length===0?h('div',{style:{fontSize:10,color:C.text3,fontStyle:'italic'}},'없음'):sTo.map(t=>{const f=fmt(t.datetime),tg=gT(t.tagId);return h('div',{key:t.id,onClick:e=>openEdit(t,e),style:{display:'flex',alignItems:'center',padding:'4px 0',borderBottom:'1px solid '+C.border2,gap:6,cursor:'pointer'}},h('span',{style:{fontSize:10,color:C.text3,minWidth:55}},f.m+'/'+f.d+' '+f.t),h('span',{style:{fontSize:12,color:C.text,flex:1}},hl(t.title,sq)),tg?h('span',{style:{...S.tSm,background:tg.color+'15',color:tg.color,borderColor:tg.color+'30'}},tg.name):null)})
       ),
       sRc.length>0?h('div',{style:{padding:'4px 16px 8px'}},
         h('div',{style:{display:'flex',alignItems:'center',gap:5,marginBottom:4}},h('span',{style:{width:6,height:6,borderRadius:'50%',background:'#8B6CC1'}}),h('span',{style:{fontSize:10,fontWeight:600,color:C.text3,flex:1}},'기록'),h('span',{style:{fontSize:9,color:C.text3,background:C.card,padding:'1px 5px',borderRadius:6}},sRc.length)),
-        sRc.map(r=>{const sd=localDate(r.startDate),ed=localDate(r.endDate);return h('div',{key:r.id,onClick:e=>{openEditRec(r,e);setShowSearch(false);sSq('')},style:{display:'flex',alignItems:'center',padding:'4px 0',borderBottom:'1px solid '+C.border2,gap:6,cursor:'pointer'}},h('span',{style:{fontSize:10,color:C.text3,minWidth:72}},(sd.getMonth()+1)+'/'+sd.getDate()+'~'+(ed.getMonth()+1)+'/'+ed.getDate()),h('span',{style:{fontSize:12,color:C.text,flex:1}},hl(r.title,sq)))})
+        sRc.map(r=>{const sd=localDate(r.startDate),ed=localDate(r.endDate);return h('div',{key:r.id,onClick:e=>openEditRec(r,e),style:{display:'flex',alignItems:'center',padding:'4px 0',borderBottom:'1px solid '+C.border2,gap:6,cursor:'pointer'}},h('span',{style:{fontSize:10,color:C.text3,minWidth:72}},(sd.getMonth()+1)+'/'+sd.getDate()+'~'+(ed.getMonth()+1)+'/'+ed.getDate()),h('span',{style:{fontSize:12,color:C.text,flex:1}},hl(r.title,sq)))})
       ):null,
       h('div',{style:{padding:'4px 16px 8px'}},
         h('div',{style:{display:'flex',alignItems:'center',gap:5,marginBottom:4}},h('span',{style:{width:6,height:6,borderRadius:'50%',background:C.green}}),h('span',{style:{fontSize:10,fontWeight:600,color:C.text3,flex:1}},'완료'),h('span',{style:{fontSize:9,color:C.text3,background:C.card,padding:'1px 5px',borderRadius:6}},sAr.length)),
-        sAr.length===0?h('div',{style:{fontSize:10,color:C.text3,fontStyle:'italic'}},'없음'):sAr.slice(0,10).map(t=>{const f=fmt(t.datetime);return h('div',{key:t.id+(t.completedAt||''),onClick:e=>{if(!t.isDailyTask){openEdit(t,e,true);setShowSearch(false);sSq('')}},style:{display:'flex',alignItems:'center',padding:'4px 0',borderBottom:'1px solid '+C.border2,gap:6,opacity:.5,cursor:t.isDailyTask?'default':'pointer'}},h('span',{style:{fontSize:10,color:C.text3,minWidth:55}},f.m+'/'+f.d+' '+f.t),h('span',{style:{fontSize:12,color:C.text2,flex:1,textDecoration:'line-through'}},hl(t.title,sq)))})
+        sAr.length===0?h('div',{style:{fontSize:10,color:C.text3,fontStyle:'italic'}},'없음'):sAr.slice(0,10).map(t=>{const f=fmt(t.datetime);return h('div',{key:t.id+(t.completedAt||''),onClick:e=>{if(!t.isDailyTask)openEdit(t,e,true)},style:{display:'flex',alignItems:'center',padding:'4px 0',borderBottom:'1px solid '+C.border2,gap:6,opacity:.5,cursor:t.isDailyTask?'default':'pointer'}},h('span',{style:{fontSize:10,color:C.text3,minWidth:55}},f.m+'/'+f.d+' '+f.t),h('span',{style:{fontSize:12,color:C.text2,flex:1,textDecoration:'line-through'}},hl(t.title,sq)))})
       )
     ):null
   ):null;
@@ -692,7 +710,7 @@ function App(){
   const editM=editTodo?h('div',{style:S.overlay,onClick:()=>{setEditTodo(null);setViewOnly(false)}},
     h('div',{style:S.modal,onClick:e=>e.stopPropagation()},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},h('span',{style:{fontSize:15,fontWeight:600,color:C.text}},viewOnly?'할 일 보기':'할 일 수정'),h('button',{onClick:()=>{setEditTodo(null);setViewOnly(false)},style:S.closeBtn},'✕')),
-      h('input',{type:'text',value:eT,onChange:e=>sET(e.target.value),style:{...S.input,background:viewOnly?C.bg:S.input.background},readOnly:viewOnly,autoFocus:!viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEdit()}),
+      h('input',{type:'text',value:eT,onChange:e=>sET(e.target.value),style:{...S.input,background:viewOnly?C.bg:S.input.background},readOnly:viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEdit()}),
       h('div',{style:{display:'flex',gap:6}},h('input',{type:'date',value:eD,onChange:e=>sED(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly}),h('input',{type:'time',value:eTi,onChange:e=>sETi(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly})),
       h('select',{value:eTg,onChange:e=>sETg(e.target.value),style:S.input,disabled:viewOnly},h('option',{value:''},'태그 없음'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
       viewOnly?null:notiRow(eNotiOn,sENotiOn,eNotiBefore,sENotiBefore,eNotiAtD,sENotiAtD,eNotiAtT,sENotiAtT),
@@ -707,7 +725,7 @@ function App(){
   const editRM=editRec?h('div',{style:S.overlay,onClick:()=>{setEditRec(null);setViewOnly(false)}},
     h('div',{style:S.modal,onClick:e=>e.stopPropagation()},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},h('span',{style:{fontSize:15,fontWeight:600,color:C.text}},viewOnly?'기록 보기':'기록 수정'),h('button',{onClick:()=>{setEditRec(null);setViewOnly(false)},style:S.closeBtn},'✕')),
-      h('input',{type:'text',value:erT,onChange:e=>sERT(e.target.value),style:{...S.input,background:viewOnly?C.bg:S.input.background},readOnly:viewOnly,autoFocus:!viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEditRec()}),
+      h('input',{type:'text',value:erT,onChange:e=>sERT(e.target.value),style:{...S.input,background:viewOnly?C.bg:S.input.background},readOnly:viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEditRec()}),
       h('div',{style:{display:'flex',gap:6,alignItems:'center'}},h('input',{type:'date',value:erSD,onChange:e=>sERSD(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly}),h('span',{style:{color:C.text3,fontSize:12,marginBottom:7}},'~'),h('input',{type:'date',value:erED,onChange:e=>sERED(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly})),
       h('select',{value:erTg,onChange:e=>sERTg(e.target.value),style:S.input,disabled:viewOnly},h('option',{value:''},'태그 없음'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
       h('textarea',{placeholder:'메모',value:erMemo,onChange:e=>sERMemo(e.target.value),rows:3,style:{...S.input,resize:'vertical',fontFamily:'inherit',minHeight:56,background:viewOnly?C.bg:S.input.background},readOnly:viewOnly}),
@@ -1064,7 +1082,7 @@ function App(){
 
   const nav=h('div',{style:S.nav},
     ...[['current','📝','현재'],['archive','✅','과거'],['settings','⚙️','설정']].map(([k,ic,lb])=>
-      h('button',{key:k,onClick:()=>{setTab(k);setShowSearch(false);sSq('');setShowSortMenu(false)},style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,background:'none',border:'none',cursor:'pointer',padding:'5px 0'}},
+      h('button',{key:k,onClick:()=>{setTab(k);setShowSearch(false);sSq('');sSqDate('');setShowSortMenu(false)},style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,background:'none',border:'none',cursor:'pointer',padding:'5px 0'}},
         h('span',{style:{fontSize:17}},ic),h('span',{style:{fontSize:9,fontWeight:500,color:tab===k?C.accent:C.text3}},lb)
       )
     )
@@ -1073,7 +1091,7 @@ function App(){
   // Wide nav for Fold5 - only 현재+설정 (과거 is already visible in split view)
   const wideNav=h('div',{style:S.nav},
     ...[['current','📝','현재'],['settings','⚙️','설정']].map(([k,ic,lb])=>
-      h('button',{key:k,onClick:()=>{setTab(k);setShowSearch(false);sSq('');setShowSortMenu(false)},style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,background:'none',border:'none',cursor:'pointer',padding:'5px 0'}},
+      h('button',{key:k,onClick:()=>{setTab(k);setShowSearch(false);sSq('');sSqDate('');setShowSortMenu(false)},style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,background:'none',border:'none',cursor:'pointer',padding:'5px 0'}},
         h('span',{style:{fontSize:17}},ic),h('span',{style:{fontSize:9,fontWeight:500,color:tab===k?C.accent:C.text3}},lb)
       )
     )
