@@ -25,13 +25,15 @@ input[type="color"]::-webkit-color-swatch{border-radius:6px;border:2px solid #D5
 @keyframes scaleIn{from{opacity:0;transform:scale(0.97)}to{opacity:1;transform:scale(1)}}
 @keyframes slideUp{from{transform:translateX(-50%) translateY(100%)}to{transform:translateX(-50%) translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)}}
 @keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
 @keyframes toastOut{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(-50%,10px)}}
 @keyframes popIn{from{opacity:0;transform:scale(0.95) translateY(-4px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes bannerSlide{from{opacity:0;transform:translateY(-100%)}to{opacity:1;transform:translateY(0)}}
-@keyframes bannerPulse{0%,100%{box-shadow:0 4px 20px rgba(200,150,62,0.3)}50%{box-shadow:0 4px 30px rgba(200,150,62,0.6)}}
 @keyframes bellRing{0%{transform:rotate(0)}10%{transform:rotate(14deg)}20%{transform:rotate(-14deg)}30%{transform:rotate(10deg)}40%{transform:rotate(-10deg)}50%{transform:rotate(6deg)}60%{transform:rotate(-6deg)}70%{transform:rotate(2deg)}80%{transform:rotate(-2deg)}90%{transform:rotate(0)}100%{transform:rotate(0)}}
+@keyframes drawerSlideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+@keyframes drawerSlideOut{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+@keyframes drawerFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes drawerFadeOut{from{opacity:1}to{opacity:0}}
 </style>
 </head>
 <body>
@@ -42,7 +44,7 @@ input[type="color"]::-webkit-color-swatch{border-radius:6px;border:2px solid #D5
 const{useState,useEffect,useCallback,useMemo,useRef,createElement:h}=React;
 const DK=["일","월","화","수","목","금","토"];
 const DTAGS=[{id:"work",name:"업무",color:"#3B82F6"},{id:"personal",name:"개인",color:"#10B981"},{id:"urgent",name:"긴급",color:"#EF4444"}];
-const SK={t:"td4-t",a:"td4-a",g:"td4-g",r:"td4-r",noti:"td4-ni",sort:"td4-sort",dt:"td4-dt"};
+const SK={t:"td4-t",a:"td4-a",g:"td4-g",r:"td4-r",noti:"td4-ni",sort:"td4-sort",dt:"td4-dt",showMS:"td4-sms",showRV:"td4-srv",rvColor:"td4-rvc"};
 const NOTI_OPTS=[{v:30,l:'30분 전'},{v:60,l:'1시간 전'},{v:120,l:'2시간 전'}];
 function ld(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f}catch(e){return f}}
 function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
@@ -68,6 +70,7 @@ function DlI(p){return h('svg',{width:p.z||14,height:p.z||14,viewBox:'0 0 24 24'
 function UlI(p){return h('svg',{width:p.z||14,height:p.z||14,viewBox:'0 0 24 24',fill:'none',stroke:p.c||C.text3,strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},h('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),h('polyline',{points:'17 8 12 3 7 8'}),h('line',{x1:12,y1:3,x2:12,y2:15}))}
 // ★ NEW: Sort icon
 function SortI(p){return h('svg',{width:p.z||17,height:p.z||17,viewBox:'0 0 24 24',fill:'none',stroke:p.c||C.text3,strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},h('line',{x1:4,y1:6,x2:13,y2:6}),h('line',{x1:4,y1:12,x2:10,y2:12}),h('line',{x1:4,y1:18,x2:7,y2:18}),h('polyline',{points:'18 9 21 6 18 3'}),h('line',{x1:21,y1:6,x2:21,y2:21}))}
+function MenuI(p){return h('svg',{width:p.z||18,height:p.z||18,viewBox:'0 0 24 24',fill:'none',stroke:p.c||C.text2,strokeWidth:2,strokeLinecap:'round'},h('line',{x1:3,y1:6,x2:21,y2:6}),h('line',{x1:3,y1:12,x2:21,y2:12}),h('line',{x1:3,y1:18,x2:21,y2:18}))}
 
 function App(){
   const[todos,setTodos]=useState(()=>ld(SK.t,[]));
@@ -113,6 +116,13 @@ function App(){
   const[showDtSection,setShowDtSection]=useState(true);
   const[showYesterdayPrompt,setShowYesterdayPrompt]=useState(false);
   const[yesterdayItems,setYesterdayItems]=useState([]);
+  // ★ DRAWER states
+  const[showDrawer,setShowDrawer]=useState(false);
+  const[drawerClosing,setDrawerClosing]=useState(false);
+  const[showMyShared,setShowMyShared]=useState(()=>ld(SK.showMS,true));
+  const[showReceived,setShowReceived]=useState(()=>ld(SK.showRV,true));
+  const[rvColor,setRvColor]=useState(()=>ld(SK.rvColor,'#E91E8B'));
+  const touchStartRef=useRef(null);
 
   useEffect(()=>{
     const onResize=()=>{
@@ -145,6 +155,26 @@ function App(){
   },[showSortMenu]);
 
   const changeSortMode=mode=>{setSortMode(mode);sv(SK.sort,mode);setShowSortMenu(false)};
+
+  // ★ DRAWER helpers
+  const openDrawer=()=>{setDrawerClosing(false);setShowDrawer(true)};
+  const closeDrawer=()=>{setDrawerClosing(true);setTimeout(()=>{setShowDrawer(false);setDrawerClosing(false)},250)};
+  const toggleShowMS=v=>{setShowMyShared(v);sv(SK.showMS,v)};
+  const toggleShowRV=v=>{setShowReceived(v);sv(SK.showRV,v)};
+  const changeRvColor=c=>{setRvColor(c);sv(SK.rvColor,c)};
+  const sharedViewOn=showMyShared||showReceived;
+  const quickToggleShared=()=>{const next=!(showMyShared&&showReceived);toggleShowMS(next);toggleShowRV(next)};
+
+  // ★ Swipe gesture for drawer
+  useEffect(()=>{
+    const onTS=e=>{const t=e.touches[0];if(t.clientX<30&&!showDrawer)touchStartRef.current={x:t.clientX,y:t.clientY}};
+    const onTM=e=>{if(!touchStartRef.current)return;const dx=e.touches[0].clientX-touchStartRef.current.x;const dy=Math.abs(e.touches[0].clientY-touchStartRef.current.y);if(dx>50&&dy<80){openDrawer();touchStartRef.current=null}};
+    const onTE=()=>{touchStartRef.current=null};
+    document.addEventListener('touchstart',onTS,{passive:true});
+    document.addEventListener('touchmove',onTM,{passive:true});
+    document.addEventListener('touchend',onTE,{passive:true});
+    return()=>{document.removeEventListener('touchstart',onTS);document.removeEventListener('touchmove',onTM);document.removeEventListener('touchend',onTE)};
+  },[showDrawer]);
 
   const showToast=(msg,duration)=>{
     if(toastTimer.current)clearTimeout(toastTimer.current);
@@ -220,11 +250,6 @@ function App(){
     }catch(e){}
   };
 
-  const playNotiSound=()=>{if(soundOn)playChimeOnce()};
-  const vibratePhone=()=>{
-    if(!vibrateOn)return;
-    try{if(navigator.vibrate)navigator.vibrate([300,150,300,150,400])}catch(e){}
-  };
   const stopAlarmLoop=()=>{
     if(alarmLoopRef.current){clearInterval(alarmLoopRef.current);alarmLoopRef.current=null}
     try{if(navigator.vibrate)navigator.vibrate(0)}catch(e){}
@@ -485,12 +510,6 @@ function App(){
     reader.readAsText(file);
     e.target.value='';
   };
-  const clearAllData=()=>{
-    askConfirm('전체 데이터 삭제','모든 할 일, 기록, 완료 내역, 태그를\n삭제하시겠습니까?\n\n⚠ 이 작업은 되돌릴 수 없습니다.\n먼저 백업을 권장합니다.',()=>{
-      sT([]);sA([]);sR([]);sTg(DTAGS);sDT([]);showToast('🗑 전체 데이터 삭제됨');
-    },'전체 삭제');
-  };
-
   // Search
   const hasSearch=sq.trim()||sqDate;
   const sf=i=>{
@@ -600,7 +619,7 @@ function App(){
 
   // ★ Confirm dialog
   const confirmDialog=confirm?h('div',{style:S.overlay,onClick:()=>setConfirm(null)},
-    h('div',{style:{...S.modal,borderRadius:16,animation:'scaleIn 0.15s ease',maxWidth:340,margin:'auto'},onClick:e=>e.stopPropagation()},
+    h('div',{style:{background:C.card,borderRadius:16,padding:18,maxWidth:340,width:'90%',animation:'scaleIn 0.15s ease',boxShadow:'0 4px 20px rgba(0,0,0,0.15)'},onClick:e=>e.stopPropagation()},
       h('div',{style:{fontSize:15,fontWeight:700,color:C.text,marginBottom:8}},confirm.title),
       h('div',{style:{fontSize:13,color:C.text2,marginBottom:18,whiteSpace:'pre-line',lineHeight:'1.5'}},confirm.msg),
       h('div',{style:{display:'flex',gap:8}},
@@ -640,14 +659,112 @@ function App(){
     }},'✓ 확인')
   ):null;
 
+  // ═══ DRAWER ═══
+  const drawerEl=showDrawer?h('div',{style:{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:250}},
+    // Backdrop
+    h('div',{onClick:closeDrawer,style:{position:'absolute',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.35)',animation:drawerClosing?'drawerFadeOut 0.25s ease forwards':'drawerFadeIn 0.25s ease'}}),
+    // Drawer panel
+    h('div',{style:{position:'absolute',top:0,left:0,bottom:0,width:280,maxWidth:'80vw',background:C.card,boxShadow:'4px 0 20px rgba(0,0,0,0.15)',animation:drawerClosing?'drawerSlideOut 0.25s ease forwards':'drawerSlideIn 0.25s ease',display:'flex',flexDirection:'column'}},
+      // Drawer header
+      h('div',{style:{padding:'max(env(safe-area-inset-top,12px),36px) 16px 12px',background:'linear-gradient(135deg,'+C.accent+',#D4A84A)',color:'#FFF'}},
+        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
+          h('div',{style:{fontSize:16,fontWeight:700}},'📋 일정 보기'),
+          h('button',{onClick:closeDrawer,style:{background:'rgba(255,255,255,0.2)',border:'none',color:'#FFF',fontSize:14,cursor:'pointer',width:28,height:28,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}},'✕')
+        ),
+        h('div',{style:{fontSize:11,opacity:0.85,marginTop:4}},'표시할 일정을 선택하세요')
+      ),
+      // Drawer body
+      h('div',{style:{flex:1,overflowY:'auto',padding:'12px 16px'}},
+        // Section: 일정 보기
+        h('div',{style:{marginBottom:16}},
+          h('div',{style:{fontSize:10,fontWeight:700,color:C.text3,marginBottom:8,letterSpacing:0.5}},'보기 설정'),
+          // 내 일정 (항상 ON)
+          h('div',{style:{display:'flex',alignItems:'center',padding:'12px 0',borderBottom:'1px solid '+C.border2}},
+            h('div',{style:{width:8,height:8,borderRadius:'50%',background:C.accent,marginRight:10}}),
+            h('div',{style:{flex:1}},
+              h('div',{style:{fontSize:13,fontWeight:600,color:C.text}},'👤 내 일정'),
+              h('div',{style:{fontSize:10,color:C.text3}},'개인 할 일 · 기록')
+            ),
+            h('span',{style:{fontSize:10,color:C.green,fontWeight:700}},'항상 ON')
+          ),
+          // 내 공유일정
+          h('div',{style:{display:'flex',alignItems:'center',padding:'12px 0',borderBottom:'1px solid '+C.border2}},
+            h('div',{style:{width:8,height:8,borderRadius:'50%',background:'#3B82F6',marginRight:10}}),
+            h('div',{style:{flex:1}},
+              h('div',{style:{fontSize:13,fontWeight:600,color:C.text}},'📤 내 공유일정'),
+              h('div',{style:{fontSize:10,color:C.text3}},'상대방에게 공유하는 일정')
+            ),
+            h('button',{onClick:()=>toggleShowMS(!showMyShared),style:{
+              width:42,height:24,borderRadius:12,border:'none',cursor:'pointer',position:'relative',
+              background:showMyShared?'#3B82F6':C.border,transition:'background 0.2s'
+            }},h('div',{style:{width:20,height:20,borderRadius:'50%',background:'#FFF',position:'absolute',top:2,left:showMyShared?20:2,transition:'left 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.2)'}}))
+          ),
+          // 공유받은 일정
+          h('div',{style:{display:'flex',alignItems:'center',padding:'12px 0',borderBottom:'1px solid '+C.border2}},
+            h('div',{style:{width:8,height:8,borderRadius:'50%',background:rvColor,marginRight:10}}),
+            h('div',{style:{flex:1}},
+              h('div',{style:{fontSize:13,fontWeight:600,color:C.text}},'📥 공유받은 일정'),
+              h('div',{style:{fontSize:10,color:C.text3}},'상대방이 공유한 일정')
+            ),
+            h('button',{onClick:()=>toggleShowRV(!showReceived),style:{
+              width:42,height:24,borderRadius:12,border:'none',cursor:'pointer',position:'relative',
+              background:showReceived?rvColor:C.border,transition:'background 0.2s'
+            }},h('div',{style:{width:20,height:20,borderRadius:'50%',background:'#FFF',position:'absolute',top:2,left:showReceived?20:2,transition:'left 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.2)'}}))
+          )
+        ),
+        // Section: 공유받은 일정 상세 설정
+        showReceived?h('div',{style:{marginBottom:16}},
+          h('div',{style:{fontSize:10,fontWeight:700,color:C.text3,marginBottom:8,letterSpacing:0.5}},'공유받은 일정 설정'),
+          // 연결된 사람 목록
+          h('div',{style:{padding:10,background:C.card2,borderRadius:8,border:'1px solid '+C.border2,marginBottom:8}},
+            h('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:6}},
+              h('div',{style:{width:32,height:32,borderRadius:'50%',background:rvColor+'20',border:'2px solid '+rvColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}},'👩'),
+              h('div',{style:{flex:1}},
+                h('div',{style:{fontSize:12,fontWeight:600,color:C.text}},'와이프'),
+                h('div',{style:{fontSize:10,color:C.text3}},'Firebase 연결 전 · 데모')
+              )
+            )
+          ),
+          // 색상 설정
+          h('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'8px 0'}},
+            h('span',{style:{fontSize:12,color:C.text2,flex:1}},'표시 색상'),
+            ...[['#E91E8B','핑크'],['#8B5CF6','보라'],['#06B6D4','청록'],['#F97316','주황']].map(([clr,lbl])=>
+              h('button',{key:clr,onClick:()=>changeRvColor(clr),style:{
+                width:28,height:28,borderRadius:'50%',background:clr,border:rvColor===clr?'3px solid '+C.text:'2px solid transparent',
+                cursor:'pointer',transition:'border 0.15s'
+              }})
+            ),
+            h('input',{type:'color',value:rvColor,onChange:e=>changeRvColor(e.target.value),style:{width:28,height:28,borderRadius:'50%',border:'1px solid '+C.border,cursor:'pointer',padding:1}})
+          )
+        ):null,
+        // Info box
+        h('div',{style:{marginTop:8,padding:10,background:C.accent+'08',borderRadius:8,border:'1px solid '+C.accent+'15'}},
+          h('div',{style:{fontSize:11,color:C.text2,lineHeight:'1.6'}},
+            '💡 사용법\n',
+            '• 왼쪽 끝에서 스와이프하면 이 메뉴가 열립니다\n',
+            '• 헤더의 👤/👥 아이콘으로 빠르게 전환할 수 있습니다\n',
+            '• Firebase 연결 후 실시간 공유가 가능합니다'
+          )
+        )
+      )
+    )
+  ):null;
+
   // ═══ HEADER ═══
   const header=h('div',{style:S.header},
     h('div',{style:{display:'flex',alignItems:'center',gap:8}},
-      tab==='current'?h('button',{onClick:()=>setVm(vm==='list'?'calendar':'list'),style:{...S.hBtn,borderColor:vm==='calendar'?C.accent:C.border}},
-        vm==='list'?CalI({z:17,c:C.text2}):LstI({z:17,c:C.accent})
-      ):h('div',{style:{width:34}}),
+      // ★ 왼쪽: 햄버거 메뉴 + 캘린더/리스트 토글
+      h('div',{style:{display:'flex',alignItems:'center',gap:4}},
+        h('button',{onClick:openDrawer,style:{...S.hBtn,borderColor:C.border}},MenuI({z:17,c:C.text2})),
+        tab==='current'?h('button',{onClick:()=>setVm(vm==='list'?'calendar':'list'),style:{...S.hBtn,borderColor:vm==='calendar'?C.accent:C.border}},
+          vm==='list'?CalI({z:17,c:C.text2}):LstI({z:17,c:C.accent})
+        ):null
+      ),
       h('div',{style:{flex:1,textAlign:'center'}},h('div',{style:S.hDate},todayStr())),
-      // ★ NEW: Sort button (left of search)
+      // ★ 오른쪽: 👤/👥 빠른 토글 + 정렬 + 검색
+      h('button',{onClick:quickToggleShared,style:{...S.hBtn,borderColor:sharedViewOn?'#3B82F6':C.border,background:sharedViewOn?'#3B82F610':'transparent',minWidth:34}},
+        h('span',{style:{fontSize:13}},sharedViewOn?'👥':'👤')
+      ),
       tab==='current'&&vm==='list'?h('div',{ref:sortRef,style:{position:'relative'}},
         h('button',{onClick:()=>setShowSortMenu(!showSortMenu),style:{...S.hBtn,borderColor:showSortMenu?C.accent:C.border,position:'relative'}},
           SortI({z:17,c:showSortMenu?C.accent:C.text2})
@@ -710,11 +827,11 @@ function App(){
   const editM=editTodo?h('div',{style:S.overlay,onClick:()=>{setEditTodo(null);setViewOnly(false)}},
     h('div',{style:S.modal,onClick:e=>e.stopPropagation()},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},h('span',{style:{fontSize:15,fontWeight:600,color:C.text}},viewOnly?'할 일 보기':'할 일 수정'),h('button',{onClick:()=>{setEditTodo(null);setViewOnly(false)},style:S.closeBtn},'✕')),
-      h('input',{type:'text',value:eT,onChange:e=>sET(e.target.value),style:{...S.input,background:viewOnly?C.bg:S.input.background},readOnly:viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEdit()}),
+      h('input',{type:'text',value:eT,onChange:e=>sET(e.target.value),style:{...S.input,background:viewOnly?C.border2:C.bg},readOnly:viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEdit()}),
       h('div',{style:{display:'flex',gap:6}},h('input',{type:'date',value:eD,onChange:e=>sED(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly}),h('input',{type:'time',value:eTi,onChange:e=>sETi(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly})),
       h('select',{value:eTg,onChange:e=>sETg(e.target.value),style:S.input,disabled:viewOnly},h('option',{value:''},'태그 없음'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
       viewOnly?null:notiRow(eNotiOn,sENotiOn,eNotiBefore,sENotiBefore,eNotiAtD,sENotiAtD,eNotiAtT,sENotiAtT),
-      h('textarea',{placeholder:'메모',value:eMemo,onChange:e=>sEMemo(e.target.value),rows:3,style:{...S.input,resize:'vertical',fontFamily:'inherit',minHeight:56,background:viewOnly?C.bg:S.input.background},readOnly:viewOnly}),
+      h('textarea',{placeholder:'메모',value:eMemo,onChange:e=>sEMemo(e.target.value),rows:3,style:{...S.input,resize:'vertical',fontFamily:'inherit',minHeight:56,background:viewOnly?C.border2:C.bg},readOnly:viewOnly}),
       viewOnly?h('button',{onClick:()=>{setEditTodo(null);setViewOnly(false)},style:{...S.submitBtn,background:C.text3}},'닫기'):null,
       !viewOnly?h('button',{onClick:saveEdit,style:S.submitBtn},'저장'):null,
       !viewOnly?h('button',{onClick:delEdit,style:S.delBtn},'삭제'):null
@@ -725,10 +842,10 @@ function App(){
   const editRM=editRec?h('div',{style:S.overlay,onClick:()=>{setEditRec(null);setViewOnly(false)}},
     h('div',{style:S.modal,onClick:e=>e.stopPropagation()},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},h('span',{style:{fontSize:15,fontWeight:600,color:C.text}},viewOnly?'기록 보기':'기록 수정'),h('button',{onClick:()=>{setEditRec(null);setViewOnly(false)},style:S.closeBtn},'✕')),
-      h('input',{type:'text',value:erT,onChange:e=>sERT(e.target.value),style:{...S.input,background:viewOnly?C.bg:S.input.background},readOnly:viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEditRec()}),
+      h('input',{type:'text',value:erT,onChange:e=>sERT(e.target.value),style:{...S.input,background:viewOnly?C.border2:C.bg},readOnly:viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEditRec()}),
       h('div',{style:{display:'flex',gap:6,alignItems:'center'}},h('input',{type:'date',value:erSD,onChange:e=>sERSD(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly}),h('span',{style:{color:C.text3,fontSize:12,marginBottom:7}},'~'),h('input',{type:'date',value:erED,onChange:e=>sERED(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly})),
       h('select',{value:erTg,onChange:e=>sERTg(e.target.value),style:S.input,disabled:viewOnly},h('option',{value:''},'태그 없음'),...tags.map(t=>h('option',{key:t.id,value:t.id},t.name))),
-      h('textarea',{placeholder:'메모',value:erMemo,onChange:e=>sERMemo(e.target.value),rows:3,style:{...S.input,resize:'vertical',fontFamily:'inherit',minHeight:56,background:viewOnly?C.bg:S.input.background},readOnly:viewOnly}),
+      h('textarea',{placeholder:'메모',value:erMemo,onChange:e=>sERMemo(e.target.value),rows:3,style:{...S.input,resize:'vertical',fontFamily:'inherit',minHeight:56,background:viewOnly?C.border2:C.bg},readOnly:viewOnly}),
       viewOnly?h('button',{onClick:()=>{setEditRec(null);setViewOnly(false)},style:{...S.submitBtn,background:C.text3}},'닫기'):null,
       !viewOnly?h('button',{onClick:saveEditRec,style:S.submitBtn},'저장'):null,
       !viewOnly?h('button',{onClick:delEditRec,style:S.delBtn},'삭제'):null
@@ -1074,8 +1191,7 @@ function App(){
       ),
       h('div',{style:S.setS},
         h('div',{style:S.setST},'데이터 현황'),
-        ...[['할 일',todos.length],['완료',archive.length],['진행 중 기록',activeRecords.length],['지난 기록',pastRecords.length],['오늘 할 일',todayDTTotal],['태그',tags.length]].map(([l,v])=>h('div',{key:l,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:12,color:C.text2,borderBottom:'1px solid '+C.border2}},h('span',null,l),h('span',{style:{background:C.accentBg,color:C.accent,fontSize:10,fontWeight:600,padding:'1px 7px',borderRadius:10}},v))),
-        h('button',{onClick:clearAllData,style:{...S.delBtn,marginTop:12,fontSize:11,padding:'8px'}},'전체 데이터 삭제')
+        ...[['할 일',todos.length],['완료',archive.length],['진행 중 기록',activeRecords.length],['지난 기록',pastRecords.length],['오늘 할 일',todayDTTotal],['태그',tags.length]].map(([l,v])=>h('div',{key:l,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:12,color:C.text2,borderBottom:'1px solid '+C.border2}},h('span',null,l),h('span',{style:{background:C.accentBg,color:C.accent,fontSize:10,fontWeight:600,padding:'1px 7px',borderRadius:10}},v)))
       )
     );
   }
@@ -1186,11 +1302,11 @@ function App(){
           addF
         )
       ),
-      fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,wideNav
+      fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,drawerEl,wideNav
     );
   }
 
-  return h('div',{style:{...S.root,maxWidth:isWide?780:480}},header,searchP,h('div',{style:S.content},content),fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,isWide?wideNav:nav);
+  return h('div',{style:{...S.root,maxWidth:isWide?780:480}},header,searchP,h('div',{style:S.content},content),fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,drawerEl,isWide?wideNav:nav);
 }
 
 const S={
@@ -1232,25 +1348,12 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
       .then(reg => {
         swRegistration = reg;
-        console.log('SW registered');
-        // Force check for updates
         reg.update();
-        // If there's a waiting SW, force it to activate
         if (reg.waiting) {
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
-        reg.addEventListener('updatefound', () => {
-          const newSW = reg.installing;
-          if (newSW) {
-            newSW.addEventListener('statechange', () => {
-              if (newSW.state === 'activated') {
-                console.log('New SW activated');
-              }
-            });
-          }
-        });
       })
-      .catch(err => console.log('SW registration failed:', err));
+      .catch(()=>{});
   });
 }
 
