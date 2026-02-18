@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todo-pwa-v1';
+const CACHE_NAME = 'todo-pwa-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -77,7 +77,7 @@ function startNotificationChecker() {
         tag: n.key,
         requireInteraction: true,
         actions: [
-          { action: 'open', title: '열기' },
+          { action: 'confirm', title: '✓ 확인' },
           { action: 'dismiss', title: '닫기' }
         ],
         data: { todoId: n.todoId }
