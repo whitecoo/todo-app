@@ -125,7 +125,7 @@ function App(){
   const[showSortMenu,setShowSortMenu]=useState(false);
   const sortRef=useRef(null);
   const[filterTags,setFilterTags]=useState(['all']);
-  const[editingTagId,setEditingTagId]=useState(null);const[editingTagName,setEditingTagName]=useState('');
+  const[editingTagId,setEditingTagId]=useState(null);const[editingTagName,setEditingTagName]=useState('');const[editingTagColor,setEditingTagColor]=useState('');
   // ★ Daily tasks (오늘 할 일)
   const[dailyTasks,setDailyTasks]=useState(()=>ld(SK.dt,[]));
   const[dtInput,setDtInput]=useState('');
@@ -204,8 +204,6 @@ function App(){
   const[partnerProfile,setPartnerProfile]=useState(null);
   const fbRef=useRef(null);
   const fbWriteTimer=useRef(null);
-  const fbBackupTimer=useRef(null);
-  const backupRestored=useRef(false);
   const[fbBackupList,setFbBackupList]=useState([]);
   const[showRestorePrompt,setShowRestorePrompt]=useState(false);
   const[lastBackupTime,setLastBackupTime]=useState(null);
@@ -745,7 +743,7 @@ function App(){
   };
 
   const addTag=()=>{if(!nTgN.trim())return;sTg([...tags,{id:Date.now().toString(),name:nTgN.trim(),color:nTgC}]);sNTgN('');sNTgC('#6366F1')};
-  const saveTagName=(id)=>{if(!editingTagName.trim())return;sTg(tags.map(t=>t.id===id?{...t,name:editingTagName.trim()}:t));setEditingTagId(null);showToast('✓ 태그 이름 변경됨')};
+  const saveTagName=(id)=>{if(!editingTagName.trim())return;sTg(tags.map(t=>t.id===id?{...t,name:editingTagName.trim(),color:editingTagColor||t.color}:t));setEditingTagId(null);showToast('✓ 태그 수정됨')};
   const delTag=id=>{
     const tg=tags.find(t=>t.id===id);
     askConfirm('태그 삭제','"'+(tg?tg.name:'')+'" 태그를 삭제하시겠습니까?',()=>{
@@ -1824,13 +1822,13 @@ function App(){
       h('div',{style:S.setS},
         h('div',{style:S.setST},'태그 관리'),
         h('div',{style:{marginBottom:12}},...tags.map(tg=>h('div',{key:tg.id,style:{display:'flex',alignItems:'center',padding:'7px 0',borderBottom:'1px solid '+C.border2,gap:6}},
-          h('div',{style:{width:10,height:10,borderRadius:'50%',background:tg.color,flexShrink:0}}),
+          editingTagId===tg.id?h('input',{type:'color',value:editingTagColor,onChange:e=>setEditingTagColor(e.target.value),style:{width:28,height:28,borderRadius:6,border:'1px solid '+C.border,background:C.card,padding:1,cursor:'pointer',flexShrink:0}}):h('div',{style:{width:10,height:10,borderRadius:'50%',background:tg.color,flexShrink:0}}),
           editingTagId===tg.id?h('div',{style:{flex:1,display:'flex',gap:4,alignItems:'center'}},
             h('input',{type:'text',value:editingTagName,onChange:e=>setEditingTagName(e.target.value),onKeyDown:e=>e.key==='Enter'&&saveTagName(tg.id),style:{...S.input,flex:1,marginBottom:0,padding:'4px 8px',fontSize:12},autoFocus:true}),
             h('button',{onClick:()=>saveTagName(tg.id),style:{padding:'4px 8px',background:C.accent,color:'#FFF',border:'none',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer',flexShrink:0}},'저장'),
             h('button',{onClick:()=>setEditingTagId(null),style:{padding:'4px 6px',background:'none',border:'1px solid '+C.border,borderRadius:4,fontSize:10,color:C.text3,cursor:'pointer',flexShrink:0}},'취소')
           ):h('span',{style:{flex:1,fontSize:13,color:C.text}},tg.name),
-          editingTagId!==tg.id?h('button',{onClick:()=>{setEditingTagId(tg.id);setEditingTagName(tg.name)},style:{background:'none',border:'1px solid '+C.accent+'30',color:C.accent,fontSize:10,padding:'2px 7px',borderRadius:4,cursor:'pointer'}},'수정'):null,
+          editingTagId!==tg.id?h('button',{onClick:()=>{setEditingTagId(tg.id);setEditingTagName(tg.name);setEditingTagColor(tg.color)},style:{background:'none',border:'1px solid '+C.accent+'30',color:C.accent,fontSize:10,padding:'2px 7px',borderRadius:4,cursor:'pointer'}},'수정'):null,
           editingTagId!==tg.id?h('button',{onClick:()=>delTag(tg.id),style:{background:'none',border:'1px solid '+C.red+'30',color:C.red,fontSize:10,padding:'2px 7px',borderRadius:4,cursor:'pointer'}},'삭제'):null
         ))),
         h('div',{style:{paddingTop:10,borderTop:'1px solid '+C.border}},
