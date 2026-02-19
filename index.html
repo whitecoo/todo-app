@@ -201,6 +201,7 @@ function App(){
   const[rcvRecordsLive,setRcvRecordsLive]=useState([]);
   const[rcvArchiveLive,setRcvArchiveLive]=useState([]);
   const[rcvDTLive,setRcvDTLive]=useState([]);
+  const[rcvTagsLive,setRcvTagsLive]=useState([]);
   const[partnerProfile,setPartnerProfile]=useState(null);
   const fbRef=useRef(null);
   const fbWriteTimer=useRef(null);
@@ -241,11 +242,11 @@ function App(){
       setFbSyncing(true);
       fbRef.current.ref('shares/'+myCode).set({
         profile:{name:myName,updatedAt:new Date().toISOString()},
-        todos:shTodos,records:shRecords,archive:shArchive,dailyTasks:shDailyTasks
+        todos:shTodos,records:shRecords,archive:shArchive,dailyTasks:shDailyTasks,tags:tags
       }).then(()=>setFbSyncing(false)).catch(e=>{console.log('FB write:',e);setFbSyncing(false)});
     },1500);
     return()=>{if(fbWriteTimer.current)clearTimeout(fbWriteTimer.current)};
-  },[fbConnected,myCode,myName,shTodos,shRecords,shArchive,shDailyTasks]);
+  },[fbConnected,myCode,myName,shTodos,shRecords,shArchive,shDailyTasks,tags]);
 
   // ═══ CLOUD BACKUP: Write ALL data to Firebase ═══
   useEffect(()=>{
@@ -335,18 +336,19 @@ function App(){
   // READ: Listen to partner's data FROM Firebase
   useEffect(()=>{
     if(!fbConnected||!partnerCode||!fbRef.current){
-      setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setRcvDTLive([]);setPartnerProfile(null);return;
+      setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setRcvDTLive([]);setRcvTagsLive([]);setPartnerProfile(null);return;
     }
     const ref=fbRef.current.ref('shares/'+partnerCode);
     const handler=ref.on('value',snap=>{
       const data=snap.val();
-      if(!data){setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setRcvDTLive([]);setPartnerProfile(null);return}
+      if(!data){setRcvTodosLive([]);setRcvRecordsLive([]);setRcvArchiveLive([]);setRcvDTLive([]);setRcvTagsLive([]);setPartnerProfile(null);return}
       const owner=data.profile?.name||'상대방';
       setPartnerProfile(data.profile||null);
       setRcvTodosLive((data.todos||[]).map(t=>({...t,_owner:owner})));
       setRcvRecordsLive((data.records||[]).map(r=>({...r,_owner:owner})));
       setRcvArchiveLive((data.archive||[]).map(a=>({...a,_owner:owner})));
       setRcvDTLive((data.dailyTasks||[]).map(d=>({...d,_owner:owner})));
+      setRcvTagsLive(data.tags||[]);
     });
     return()=>ref.off('value',handler);
   },[fbConnected,partnerCode]);
@@ -443,8 +445,34 @@ function App(){
   const sShDT=useCallback(dt=>{setShDailyTasks(dt);sv(SK.sdt,dt)},[]);
   const sShA=useCallback(a=>{setShArchive(a);sv(SK.sa,a)},[]);
   const gT=id=>tags.find(t=>t.id===id);
+  // ★ 상대방 태그도 검색 (내 색상 우선)
+  const gTAny=id=>{
+    const mine=tags.find(t=>t.id===id);
+    if(mine)return mine;
+    const partner=rcvTagsLive.find(t=>t.id===id);
+    if(partner){
+      const sameNameMine=tags.find(t=>t.name===partner.name);
+      if(sameNameMine)return{...partner,color:sameNameMine.color};
+      return partner;
+    }
+    return undefined;
+  };
   const getTids=item=>item.tagIds||(item.tagId?[item.tagId]:[]);
-  const gTs=item=>getTids(item).map(id=>gT(id)).filter(Boolean);
+  const gTs=item=>getTids(item).map(id=>gTAny(id)).filter(Boolean);
+  // ★ 필터용 통합 태그 (이름 기준 병합, 상대방 고유 태그는 뒤에)
+  const mergedFilterTags=useMemo(()=>{
+    const result=tags.map(t=>({name:t.name,color:t.color}));
+    const myNames=new Set(tags.map(t=>t.name));
+    rcvTagsLive.forEach(pt=>{
+      if(!myNames.has(pt.name))result.push({name:pt.name,color:pt.color,_isPartner:true});
+    });
+    return result;
+  },[tags,rcvTagsLive]);
+  // ★ 태그ID → 이름 변환 (필터링용)
+  const tagIdToName=id=>{
+    const t=gTAny(id);
+    return t?t.name:null;
+  };
 
   const askConfirm=(title,msg,onOk,okLabel,okColor)=>{
     setConfirm({title,msg,onOk:()=>{onOk();setConfirm(null)},onCancel:()=>setConfirm(null),okLabel:okLabel||'삭제',okColor:okColor||C.red});
@@ -889,12 +917,12 @@ function App(){
     allTodos.forEach(t=>items.push({type:'todo',data:t,src:t._src,sortDate:new Date(t.datetime),title:t.title}));
     allActiveRecords.forEach(r=>items.push({type:'record',data:r,src:r._src,sortDate:localDate(r.startDate),title:r.title}));
 
-    // Tag filter (multi-select)
+    // Tag filter (multi-select, name-based)
     const isAll=filterTags.includes('all');
     const filtered=isAll?items:items.filter(i=>{
       const tids=getTids(i.data);
       if(filterTags.includes('none')&&tids.length===0)return true;
-      return tids.some(tid=>filterTags.includes(tid));
+      return tids.some(tid=>{const name=tagIdToName(tid);return name&&filterTags.includes(name)});
     });
 
     if(sortMode==='date'){
@@ -908,7 +936,7 @@ function App(){
       });
     }
     return filtered;
-  },[allTodos,allActiveRecords,sortMode,filterTags]);
+  },[allTodos,allActiveRecords,sortMode,filterTags,tags,rcvTagsLive]);
 
   const sortLabel=sortMode==='date'?'날짜순':sortMode==='name'?'이름순':'구분순';
 
@@ -962,7 +990,7 @@ function App(){
         }
       });
     });return bars;
-  },[recForMonth,weeks,cm,tags,rvColor]);
+  },[recForMonth,weeks,cm,tags,rcvTagsLive,rvColor]);
 
   const isT=d=>d&&cm.y===td.getFullYear()&&cm.m===td.getMonth()&&d===td.getDate();
   const pM=()=>setCm(p=>p.m===0?{y:p.y-1,m:11}:{y:p.y,m:p.m-1});
@@ -1631,21 +1659,22 @@ function App(){
   const shTomorrowDT=shDailyTasks.filter(d=>d.date===tmrwDS);
   const allTomorrowDT=[...tomorrowDT.map(d=>({...d,_src:'personal'})),...shTomorrowDT.map(d=>({...d,_src:'shared'}))];
 
-  // ═══ TAG FILTER ROW (multi-select) ═══
-  const toggleFilter=(id)=>{
+  // ═══ TAG FILTER ROW (multi-select, name-based) ═══
+  const toggleFilter=(name)=>{
     setFilterTags(prev=>{
-      if(id==='all')return['all'];
+      if(name==='all')return['all'];
       let next=prev.filter(x=>x!=='all');
-      if(next.includes(id))next=next.filter(x=>x!==id);
-      else next=[...next,id];
+      if(next.includes(name))next=next.filter(x=>x!==name);
+      else next=[...next,name];
       return next.length?next:['all'];
     });
   };
   const isFA=filterTags.includes('all');
   const tagFilterRow=tab==='current'&&vm==='list'?h('div',{style:{display:'flex',gap:4,padding:'6px 12px 2px',overflowX:'auto',WebkitOverflowScrolling:'touch'}},
     h('button',{onClick:()=>toggleFilter('all'),style:{padding:'3px 10px',borderRadius:12,border:'1px solid '+(isFA?C.accent:C.border),background:isFA?C.accent+'15':'transparent',color:isFA?C.accent:C.text3,fontSize:10,fontWeight:isFA?700:500,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}},'전체'),
-    ...tags.map(tg=>{const sel=filterTags.includes(tg.id);return h('button',{key:tg.id,onClick:()=>toggleFilter(tg.id),style:{padding:'3px 10px',borderRadius:12,border:'1px solid '+(sel?tg.color+'50':C.border),background:sel?tg.color+'15':'transparent',color:sel?tg.color:C.text3,fontSize:10,fontWeight:sel?700:500,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:3}},
-      h('span',{style:{width:6,height:6,borderRadius:'50%',background:tg.color,flexShrink:0}}),tg.name
+    ...mergedFilterTags.map(tg=>{const sel=filterTags.includes(tg.name);return h('button',{key:tg.name,onClick:()=>toggleFilter(tg.name),style:{padding:'3px 10px',borderRadius:12,border:'1px solid '+(sel?tg.color+'50':C.border),background:sel?tg.color+'15':'transparent',color:sel?tg.color:C.text3,fontSize:10,fontWeight:sel?700:500,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:3}},
+      h('span',{style:{width:6,height:6,borderRadius:'50%',background:tg.color,flexShrink:0}}),tg.name,
+      tg._isPartner?h('span',{style:{fontSize:7,color:tg.color,opacity:.6}},'👤'):null
     )}),
     h('button',{onClick:()=>toggleFilter('none'),style:{padding:'3px 10px',borderRadius:12,border:'1px solid '+(filterTags.includes('none')?C.text3+'50':C.border),background:filterTags.includes('none')?C.text3+'15':'transparent',color:filterTags.includes('none')?C.text2:C.text3,fontSize:10,fontWeight:filterTags.includes('none')?700:500,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}},'태그없음')
   ):null;
@@ -1822,7 +1851,7 @@ function App(){
         h('div',{style:S.setST},'🏷 태그별 완료'),
         tagEntries.length===0?h('div',{style:{fontSize:12,color:C.text3,padding:8}},'아직 완료 데이터가 없습니다'):null,
         ...tagEntries.map(([tid,cnt])=>{
-          const tg=tags.find(t=>t.id===tid);
+          const tg=gTAny(tid);
           const nm=tid==='_none'?'태그 없음':tg?tg.name:'삭제된 태그';
           const clr=tg?tg.color:C.text3;
           const pct=Math.round(cnt/tagTotal*100);
