@@ -47,7 +47,7 @@ const{useState,useEffect,useCallback,useMemo,useRef,createElement:h}=React;
 const DK=["일","월","화","수","목","금","토"];
 const DTAGS=[{id:"work",name:"업무",color:"#3B82F6"},{id:"personal",name:"개인",color:"#10B981"},{id:"urgent",name:"긴급",color:"#EF4444"}];
 const SK={t:"td4-t",a:"td4-a",g:"td4-g",r:"td4-r",noti:"td4-ni",sort:"td4-sort",dt:"td4-dt",showMS:"td4-sms",showRV:"td4-srv",rvColor:"td4-rvc",st:"td4-st",sr:"td4-sr",sdt:"td4-sdt",sa:"td4-sa",dark:"td4-dark",fbcfg:"td4-fbc",myCode:"td4-mc",pCode:"td4-pc",myName:"td4-mn"};
-const NOTI_OPTS=[{v:30,l:'30분 전'},{v:60,l:'1시간 전'},{v:120,l:'2시간 전'}];
+const NOTI_OPTS=[{v:0,l:'즉시'},{v:30,l:'30분 전'},{v:60,l:'1시간 전'},{v:120,l:'2시간 전'}];
 function ld(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f}catch(e){return f}}
 function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 function fmt(s){const d=new Date(s);return{m:d.getMonth()+1,d:d.getDate(),w:DK[d.getDay()],t:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}}
@@ -596,7 +596,7 @@ function App(){
           notiKey=todo.id+'_at_'+todo.notiAt;
         }else{
           const dt=new Date(todo.datetime).getTime();
-          const beforeMs=(todo.notiBefore||30)*60000;
+          const beforeMs=(todo.notiBefore!=null?todo.notiBefore:30)*60000;
           alertTime=dt-beforeMs;
           notiKey=todo.id+'_'+todo.notiBefore;
         }
@@ -605,7 +605,7 @@ function App(){
           notifiedRef.current=[...notifiedRef.current,notiKey];
           sv(SK.noti,notifiedRef.current);
           const itags=gTs(todo);
-          const lbl=todo.notiAt?'알림':notiLabel(todo.notiBefore||30);
+          const lbl=todo.notiAt?'알림':notiLabel(todo.notiBefore!=null?todo.notiBefore:30);
           const bodyText=todo.title+(itags.length?' ['+itags.map(t=>t.name).join(',')+']':'');
           const tgColor=itags.length?itags[0].color:C.accent;
 
@@ -719,7 +719,7 @@ function App(){
       sENotiAtD(toDS(nad));
       sENotiAtT(String(nad.getHours()).padStart(2,'0')+':'+String(nad.getMinutes()).padStart(2,'0'));
     }else{
-      sENotiBefore(todo.notiBefore||30);sENotiAtD('');sENotiAtT('');
+      sENotiBefore(todo.notiBefore!=null?todo.notiBefore:30);sENotiAtD('');sENotiAtT('');
     }
   };
   const saveEdit=()=>{
@@ -1007,7 +1007,7 @@ function App(){
           h('span',{style:{fontSize:11,fontWeight:600,color:on?C.accent:C.text3}},on?'알림 ON':'알림 OFF')
         ),
         on?h('div',{style:{display:'flex',gap:3,flexWrap:'wrap'}},
-          ...[{v:30,l:'30분 전'},{v:60,l:'1시간 전'}].map(o=>h('button',{key:o.v,onClick:()=>setBefore(o.v),style:{
+          ...[{v:0,l:'즉시'},{v:30,l:'30분 전'},{v:60,l:'1시간 전'}].map(o=>h('button',{key:o.v,onClick:()=>setBefore(o.v),style:{
             padding:'4px 8px',borderRadius:14,border:'1px solid '+(before===o.v?C.accent+'50':C.border),
             background:before===o.v?C.accent+'18':'transparent',color:before===o.v?C.accent:C.text3,
             fontSize:10,fontWeight:before===o.v?700:500,cursor:'pointer'
@@ -2289,10 +2289,10 @@ function syncNotificationsToSW() {
         lbl = '알림';
       } else {
         const dt = new Date(todo.datetime).getTime();
-        const beforeMs = (todo.notiBefore || 30) * 60000;
+        const beforeMs = (todo.notiBefore != null ? todo.notiBefore : 30) * 60000;
         alertTime = dt - beforeMs;
         notiKey = todo.id + '_' + todo.notiBefore;
-        lbl = todo.notiBefore === 60 ? '1시간 전' : '30분 전';
+        lbl = todo.notiBefore === 0 ? '즉시' : todo.notiBefore === 60 ? '1시간 전' : '30분 전';
       }
       if (alertTime > now - 15000 && !notified.includes(notiKey)) {
         const tids = todo.tagIds || (todo.tagId ? [todo.tagId] : []);
