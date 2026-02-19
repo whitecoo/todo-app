@@ -57,7 +57,7 @@ function toDS(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0
 function daysBetween(a,b){return Math.ceil((b-a)/(864e5))+1}
 // ★ Parse date string as LOCAL time (not UTC) to fix timezone issues
 function localDate(s){return new Date(s+'T00:00:00')}
-function notiLabel(m){const o=NOTI_OPTS.find(x=>x.v===m);return o?o.l:'30분 전'}
+function notiLabel(m){const o=NOTI_OPTS.find(x=>x.v===m);return o?o.l:'즉시'}
 
 const CLt={bg:'#F5F0EA',card:'#FFFFFF',card2:'#FAF7F3',border:'#E8E2DA',border2:'#F0EBE4',text:'#2C2520',text2:'#8C7E72',text3:'#B8AEA2',accent:'#C8963E',accentBg:'#C8963E14',green:'#5A9E6F',greenBg:'#5A9E6F18',red:'#C45C5C'};
 const CDk={bg:'#1C1917',card:'#292524',card2:'#1F1D1B',border:'#3D3530',border2:'#332E29',text:'#E8E0D8',text2:'#A89E94',text3:'#6D6560',accent:'#D4A54A',accentBg:'#D4A54A14',green:'#6BAF7F',greenBg:'#6BAF7F18',red:'#D46B6B'};
@@ -88,7 +88,7 @@ function App(){
   const[addMode,setAddMode]=useState('todo');
   const[fadingOut,setFadingOut]=useState(new Set());
   const[nT,sNT]=useState('');const[nD,sND]=useState('');const[nTi,sNTi]=useState('');const[nTgs,sNTgs]=useState(['']);
-  const[nNotiOn,sNNotiOn]=useState(true);const[nNotiBefore,sNNotiBefore]=useState(30);
+  const[nNotiOn,sNNotiOn]=useState(true);const[nNotiBefore,sNNotiBefore]=useState(0);
   const[nNotiAtD,sNNotiAtD]=useState('');const[nNotiAtT,sNNotiAtT]=useState('');
   const[nMemo,sNMemo]=useState('');
   const[nCL,sNCL]=useState([]);const[nCLInput,sNCLInput]=useState('');const[nCLOpen,sNCLOpen]=useState(false);
@@ -100,7 +100,7 @@ function App(){
   const[nTgN,sNTgN]=useState('');const[nTgC,sNTgC]=useState('#6366F1');
   const[editTodo,setEditTodo]=useState(null);
   const[eT,sET]=useState('');const[eD,sED]=useState('');const[eTi,sETi]=useState('');const[eTgs,sETgs]=useState(['']);
-  const[eNotiOn,sENotiOn]=useState(true);const[eNotiBefore,sENotiBefore]=useState(30);
+  const[eNotiOn,sENotiOn]=useState(true);const[eNotiBefore,sENotiBefore]=useState(0);
   const[eNotiAtD,sENotiAtD]=useState('');const[eNotiAtT,sENotiAtT]=useState('');
   const[eMemo,sEMemo]=useState('');
   const[eCL,sECL]=useState([]);const[eCLInput,sECLInput]=useState('');const[eCLOpen,sECLOpen]=useState(false);
@@ -596,7 +596,7 @@ function App(){
           notiKey=todo.id+'_at_'+todo.notiAt;
         }else{
           const dt=new Date(todo.datetime).getTime();
-          const beforeMs=(todo.notiBefore!=null?todo.notiBefore:30)*60000;
+          const beforeMs=(todo.notiBefore!=null?todo.notiBefore:0)*60000;
           alertTime=dt-beforeMs;
           notiKey=todo.id+'_'+todo.notiBefore;
         }
@@ -605,8 +605,8 @@ function App(){
           notifiedRef.current=[...notifiedRef.current,notiKey];
           sv(SK.noti,notifiedRef.current);
           const itags=gTs(todo);
-          const lbl=todo.notiAt?'알림':notiLabel(todo.notiBefore!=null?todo.notiBefore:30);
-          const bodyText=todo.title+(itags.length?' ['+itags.map(t=>t.name).join(',')+']':'');
+          const lbl=todo.notiAt?'알림':notiLabel(todo.notiBefore!=null?todo.notiBefore:0);
+          const bodyText=todo.title+(itags.length?' ['+itags.map(t=>t.name).join(',')+']':'')+(todo.memo?'\n📝 '+todo.memo:'');
           const tgColor=itags.length?itags[0].color:C.accent;
 
           // 1+2) Persistent alarm (sound+vibrate loop via showNotiAlert)
@@ -675,7 +675,7 @@ function App(){
     if(writeMode==='shared'){sShT([...shTodos,...newItems].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
     else{sT([...todos,...newItems].sort((a,b)=>new Date(a.datetime)-new Date(b.datetime)))}
     const cnt=newItems.length;
-    sNT('');sND('');sNTi('');sNTgs(['']);sNMemo('');sNCL([]);sNCLInput('');sNCLOpen(false);sNRepeat('none');sNRepeatEnd('');sNNotiOn(true);sNNotiBefore(30);sNNotiAtD('');sNNotiAtT('');setShowAdd(false);
+    sNT('');sND('');sNTi('');sNTgs(['']);sNMemo('');sNCL([]);sNCLInput('');sNCLOpen(false);sNRepeat('none');sNRepeatEnd('');sNNotiOn(true);sNNotiBefore(0);sNNotiAtD('');sNNotiAtT('');setShowAdd(false);
     if(cnt>1)showToast('🔁 '+repeatLabel(nRepeat)+' '+cnt+'개 일정 생성');
   };
   const completeTodo=(id,src)=>{
@@ -719,7 +719,7 @@ function App(){
       sENotiAtD(toDS(nad));
       sENotiAtT(String(nad.getHours()).padStart(2,'0')+':'+String(nad.getMinutes()).padStart(2,'0'));
     }else{
-      sENotiBefore(todo.notiBefore!=null?todo.notiBefore:30);sENotiAtD('');sENotiAtT('');
+      sENotiBefore(todo.notiBefore!=null?todo.notiBefore:0);sENotiAtD('');sENotiAtT('');
     }
   };
   const saveEdit=()=>{
@@ -2289,10 +2289,10 @@ function syncNotificationsToSW() {
         lbl = '알림';
       } else {
         const dt = new Date(todo.datetime).getTime();
-        const beforeMs = (todo.notiBefore != null ? todo.notiBefore : 30) * 60000;
+        const beforeMs = (todo.notiBefore != null ? todo.notiBefore : 0) * 60000;
         alertTime = dt - beforeMs;
         notiKey = todo.id + '_' + todo.notiBefore;
-        lbl = todo.notiBefore === 0 ? '즉시' : todo.notiBefore === 60 ? '1시간 전' : '30분 전';
+        lbl = todo.notiBefore === 0 ? '즉시' : todo.notiBefore === 60 ? '1시간 전' : todo.notiBefore === 30 ? '30분 전' : '즉시';
       }
       if (alertTime > now - 15000 && !notified.includes(notiKey)) {
         const tids = todo.tagIds || (todo.tagId ? [todo.tagId] : []);
@@ -2301,7 +2301,7 @@ function syncNotificationsToSW() {
           todoId: todo.id,
           key: notiKey,
           title: lbl,
-          body: todo.title + (tgNames.length ? ' [' + tgNames.join(',') + ']' : ''),
+          body: todo.title + (tgNames.length ? ' [' + tgNames.join(',') + ']' : '') + (todo.memo ? '\n📝 ' + todo.memo : ''),
           alertTime: alertTime,
           fired: false
         });

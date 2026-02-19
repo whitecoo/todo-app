@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todo-pwa-v12';
+const CACHE_NAME = 'todo-pwa-v13';
 const ASSETS = [
   './',
   './index.html',
