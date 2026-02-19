@@ -204,6 +204,11 @@ function App(){
   const[partnerProfile,setPartnerProfile]=useState(null);
   const fbRef=useRef(null);
   const fbWriteTimer=useRef(null);
+  const fbBackupTimer=useRef(null);
+  const backupRestored=useRef(false);
+  const[fbBackupList,setFbBackupList]=useState([]);
+  const[showRestorePrompt,setShowRestorePrompt]=useState(false);
+  const[lastBackupTime,setLastBackupTime]=useState(null);
 
   const genCode=()=>{const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';for(let i=0;i<6;i++)r+=c[Math.floor(Math.random()*c.length)];return r};
 
@@ -239,6 +244,90 @@ function App(){
     },1500);
     return()=>{if(fbWriteTimer.current)clearTimeout(fbWriteTimer.current)};
   },[fbConnected,myCode,myName,shTodos,shRecords,shArchive,shDailyTasks]);
+
+  // ═══ CLOUD BACKUP: Write ALL data to Firebase ═══
+  useEffect(()=>{
+    if(!fbConnected||!myCode||!fbRef.current||backupRestored.current)return;
+    // Skip backup if ALL data is empty (likely fresh install before restore)
+    const hasData=todos.length>0||archive.length>0||records.length>0||dailyTasks.length>0||tags.length>DTAGS.length;
+    if(!hasData)return;
+    if(fbBackupTimer.current)clearTimeout(fbBackupTimer.current);
+    fbBackupTimer.current=setTimeout(()=>{
+      const now=new Date().toISOString();
+      fbRef.current.ref('backups/'+myCode).set({
+        name:myName||'이름없음',
+        updatedAt:now,
+        code:myCode,
+        partnerCode:partnerCode||'',
+        settings:{dark,sortMode,rvColor,showMyShared,showReceived},
+        data:{todos,archive,tags,records,dailyTasks,shTodos,shRecords,shArchive,shDailyTasks}
+      }).then(()=>{setLastBackupTime(now)}).catch(e=>console.log('Backup err:',e));
+    },3000);
+    return()=>{if(fbBackupTimer.current)clearTimeout(fbBackupTimer.current)};
+  },[fbConnected,myCode,myName,partnerCode,todos,archive,tags,records,dailyTasks,shTodos,shRecords,shArchive,shDailyTasks,dark,sortMode,rvColor,showMyShared,showReceived]);
+
+  // ═══ CLOUD BACKUP: Scan available backups on connect ═══
+  useEffect(()=>{
+    if(!fbConnected||!fbRef.current)return;
+    fbRef.current.ref('backups').once('value',snap=>{
+      const data=snap.val();
+      if(!data){setFbBackupList([]);return}
+      const list=Object.entries(data).map(([key,val])=>({
+        code:key,name:val.name||key,updatedAt:val.updatedAt||''
+      }));
+      setFbBackupList(list);
+      // Auto-show restore prompt if localStorage is empty
+      const hasLocal=todos.length>0||archive.length>0||records.length>0||dailyTasks.length>0;
+      if(!hasLocal&&list.length>0&&!backupRestored.current){
+        setShowRestorePrompt(true);
+      }
+    });
+  },[fbConnected]);
+
+  // ═══ CLOUD BACKUP: Restore function ═══
+  const restoreFromCloud=(backupCode)=>{
+    if(!fbRef.current)return;
+    fbRef.current.ref('backups/'+backupCode).once('value',snap=>{
+      const val=snap.val();
+      if(!val||!val.data){showToast('⚠ 백업 데이터 없음');return}
+      backupRestored.current=true;
+      const d=val.data;
+      if(d.todos)sT(d.todos);
+      if(d.archive)sA(d.archive);
+      if(d.tags&&d.tags.length>0)sTg(d.tags);
+      if(d.records)sR(d.records);
+      if(d.dailyTasks)sDT(d.dailyTasks);
+      if(d.shTodos)sShT(d.shTodos);
+      if(d.shRecords)sShR(d.shRecords);
+      if(d.shArchive)sShA(d.shArchive);
+      if(d.shDailyTasks)sShDT(d.shDailyTasks);
+      if(val.code)saveMyCode(val.code);
+      if(val.partnerCode)savePartnerCode(val.partnerCode);
+      if(val.name)saveMyName(val.name);
+      if(val.settings){
+        if(val.settings.dark!==undefined)toggleDark(val.settings.dark);
+        if(val.settings.sortMode){setSortMode(val.settings.sortMode);sv(SK.sort,val.settings.sortMode)}
+        if(val.settings.rvColor){setRvColor(val.settings.rvColor);sv(SK.rvColor,val.settings.rvColor)}
+      }
+      setShowRestorePrompt(false);
+      setTimeout(()=>{backupRestored.current=false},5000);
+      showToast('✅ 클라우드에서 복원 완료!');
+    });
+  };
+
+  // Manual refresh backup list
+  const refreshBackupList=()=>{
+    if(!fbConnected||!fbRef.current){showToast('⚠ Firebase 미연결');return}
+    fbRef.current.ref('backups').once('value',snap=>{
+      const data=snap.val();
+      if(!data){setFbBackupList([]);showToast('백업 없음');return}
+      const list=Object.entries(data).map(([key,val])=>({
+        code:key,name:val.name||key,updatedAt:val.updatedAt||''
+      }));
+      setFbBackupList(list);
+      showToast('☁️ 백업 목록 갱신됨');
+    });
+  };
 
   // READ: Listen to partner's data FROM Firebase
   useEffect(()=>{
@@ -968,6 +1057,37 @@ function App(){
     )
   ):null;
 
+  // ★ Cloud restore prompt
+  const restorePromptEl=showRestorePrompt&&fbBackupList.length>0?h('div',{style:S.overlay},
+    h('div',{style:{background:C.card,borderRadius:16,padding:20,maxWidth:360,width:'90%',animation:'scaleIn 0.15s ease',boxShadow:'0 4px 24px rgba(0,0,0,0.2)'},onClick:e=>e.stopPropagation()},
+      h('div',{style:{textAlign:'center',marginBottom:14}},
+        h('div',{style:{fontSize:32,marginBottom:6}},'☁️'),
+        h('div',{style:{fontSize:15,fontWeight:700,color:C.text}},'클라우드 백업 발견!'),
+        h('div',{style:{fontSize:11,color:C.text3,marginTop:4}},'복원할 데이터를 선택하세요')
+      ),
+      ...fbBackupList.map(b=>{
+        const d=b.updatedAt?new Date(b.updatedAt):null;
+        const timeStr=d?(d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'):'';
+        return h('button',{key:b.code,onClick:()=>restoreFromCloud(b.code),style:{
+          width:'100%',padding:'12px 14px',marginBottom:8,background:C.accent+'08',
+          border:'1px solid '+C.accent+'30',borderRadius:10,cursor:'pointer',
+          display:'flex',alignItems:'center',gap:10,textAlign:'left'
+        }},
+          h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.accent+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}},'📱'),
+          h('div',{style:{flex:1,minWidth:0}},
+            h('div',{style:{fontSize:14,fontWeight:700,color:C.text}},b.name),
+            h('div',{style:{fontSize:10,color:C.text3}},timeStr?'마지막 동기화: '+timeStr:'')
+          ),
+          h('div',{style:{fontSize:11,color:C.accent,fontWeight:600}},'복원 →')
+        )
+      }),
+      h('button',{onClick:()=>setShowRestorePrompt(false),style:{
+        width:'100%',padding:'10px',marginTop:4,background:'transparent',
+        color:C.text3,border:'1px solid '+C.border,borderRadius:8,fontSize:12,cursor:'pointer'
+      }},'건너뛰기 (새로 시작)')
+    )
+  ):null;
+
   // ★ Toast
   const toastEl=toast?h('div',{style:{
     position:'fixed',bottom:90,left:'50%',transform:'translate(-50%,0)',
@@ -1258,7 +1378,7 @@ function App(){
           const it=isT(day);const dw=new Date(cm.y,cm.m,day).getDay();
           const dayTodos=(tfd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
           const dayDone=(afd[day]||[]).sort((a,b)=>new Date(a.datetime)-new Date(b.datetime));
-          return h('div',{key:day,style:{padding:'2px 1px',background:it?'#EDE5D8':'transparent',borderRight:ci<6?'1px solid #E5DFD8':'none',borderBottom:'1px solid #E5DFD8',border:it?'1.5px solid #3C3530':''}},
+          return h('div',{key:day,style:{padding:'2px 1px',background:it?'#EDE5D8':'transparent',borderTop:it?'1.2px solid #3C3530':'none',borderLeft:it?'1.2px solid #3C3530':'none',borderRight:it?'1.2px solid #3C3530':ci<6?'1px solid #E5DFD8':'none',borderBottom:it?'1.2px solid #3C3530':'1px solid #E5DFD8'}},
             h('div',{style:{fontSize:11,fontWeight:it?800:500,color:it?C.accent:dw===0?C.red:dw===6?'#3B82F6':C.text2,textAlign:'center',marginBottom:barGap||1}},day),
             // All todos (no limit) - time order
             ...dayTodos.map(t=>{const itags=gTs(t);const f=fmt(t.datetime);const isSh=t._src==='shared';const isRcv=t._src==='received';const fClr=itags.length?itags[0].color:null;const bgClr=isRcv?rvColor+'20':isSh?'#3B82F620':fClr?fClr+'20':C.border2;const txtClr=isRcv?rvColor:fClr?fClr:C.text2;const bdrL=isRcv?'2px solid '+rvColor:isSh?'2px solid #3B82F6':'none';return h('div',{key:'ct'+t.id+(t._src||''),onClick:e=>openEdit(t,e,isRcv,t._src),style:{fontSize:7,lineHeight:'9px',padding:'1px 2px',marginBottom:1,borderRadius:2,background:bgClr,color:txtClr,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',borderLeft:bdrL,fontWeight:500}},f.t+' '+t.title)}),
@@ -1851,9 +1971,44 @@ function App(){
           partnerCode&&!partnerProfile?h('div',{style:{fontSize:10,color:C.text3,marginTop:4}},'⏳ 상대방 데이터 대기 중... (코드가 맞는지 확인하세요)'):null
         ):null
       ),
+      // ═══ CLOUD BACKUP ═══
+      fbConfig?h('div',{style:S.setS},
+        h('div',{style:S.setST},'☁️ 클라우드 자동 백업'),
+        // Status
+        h('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:fbConnected&&myCode?C.green+'10':C.bg,borderRadius:8,border:'1px solid '+(fbConnected&&myCode?C.green+'30':C.border),marginBottom:10}},
+          h('div',{style:{width:8,height:8,borderRadius:'50%',background:fbConnected&&myCode?C.green:'#ccc'}}),
+          h('div',{style:{flex:1}},
+            h('div',{style:{fontSize:12,fontWeight:600,color:fbConnected&&myCode?C.green:C.text3}},fbConnected&&myCode?'자동 백업 활성':'백업 비활성'),
+            lastBackupTime?h('div',{style:{fontSize:10,color:C.text3}},'마지막: '+new Date(lastBackupTime).toLocaleString('ko-KR')):null
+          )
+        ),
+        h('div',{style:{fontSize:11,color:C.text3,marginBottom:10,lineHeight:'1.6'}},
+          '데이터가 변경될 때마다 Firebase에 자동 저장됩니다.\n앱 삭제 후 재설치해도 복원할 수 있습니다.'
+        ),
+        // Backup list
+        fbBackupList.length>0?h('div',{style:{marginBottom:8}},
+          h('div',{style:{fontSize:11,fontWeight:600,color:C.text2,marginBottom:6}},'저장된 백업 ('+fbBackupList.length+'개)'),
+          ...fbBackupList.map(b=>{
+            const d=b.updatedAt?new Date(b.updatedAt):null;
+            const timeStr=d?(d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'):'';
+            const isMe=b.code===myCode;
+            return h('div',{key:b.code,style:{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',marginBottom:4,background:isMe?C.accent+'08':C.bg,borderRadius:8,border:'1px solid '+(isMe?C.accent+'25':C.border)}},
+              h('span',{style:{fontSize:14}},isMe?'📱':'👤'),
+              h('div',{style:{flex:1,minWidth:0}},
+                h('div',{style:{fontSize:12,fontWeight:600,color:C.text}},b.name+(isMe?' (나)':'')),
+                h('div',{style:{fontSize:10,color:C.text3}},timeStr)
+              ),
+              !isMe?h('button',{onClick:()=>{
+                askConfirm('클라우드 복원','"'+b.name+'" 백업으로 복원하시겠습니까?\n현재 데이터가 모두 교체됩니다.',()=>restoreFromCloud(b.code),'복원',C.accent);
+              },style:{padding:'5px 10px',background:C.accent,color:'#FFF',border:'none',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer'}},'복원'):null
+            )
+          })
+        ):h('div',{style:{fontSize:11,color:C.text3,fontStyle:'italic',marginBottom:8}},'저장된 백업 없음'),
+        h('button',{onClick:refreshBackupList,style:{width:'100%',padding:'8px',background:'transparent',color:C.accent,border:'1px solid '+C.accent+'30',borderRadius:7,fontSize:11,fontWeight:600,cursor:'pointer'}},'🔄 백업 목록 새로고침')
+      ):null,
       h('div',{style:S.setS},
         h('div',{style:S.setST},'데이터 백업 / 복원'),
-        h('div',{style:{fontSize:11,color:C.text3,marginBottom:10,lineHeight:'1.5'}},'브라우저 캐시를 지우면 데이터가 사라질 수 있습니다.\n정기적으로 백업해두시는 것을 권장합니다.'),
+        h('div',{style:{fontSize:11,color:C.text3,marginBottom:10,lineHeight:'1.5'}},fbConfig?'클라우드 백업 외에 파일로도 저장할 수 있습니다.':'브라우저 캐시를 지우면 데이터가 사라질 수 있습니다.\n정기적으로 백업해두시는 것을 권장합니다.'),
         h('div',{style:{display:'flex',gap:8,marginBottom:8}},
           h('button',{onClick:exportData,style:{...S.backupBtn,background:C.accent+'12',color:C.accent,borderColor:C.accent+'30'}},DlI({z:14,c:C.accent}),h('span',null,'백업 저장')),
           h('button',{onClick:importData,style:{...S.backupBtn,background:C.green+'12',color:C.green,borderColor:C.green+'30'}},UlI({z:14,c:C.green}),h('span',null,'복원하기'))
@@ -1991,11 +2146,11 @@ function App(){
           addF
         )
       ),
-      fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,drawerEl,wideNav
+      fab,editM,editRM,confirmDialog,restorePromptEl,toastEl,notiAlertEl,fileInput,drawerEl,wideNav
     );
   }
 
-  return h('div',{style:{...S.root,maxWidth:isWide?780:480}},header,searchP,h('div',{style:S.content},content),fab,editM,editRM,confirmDialog,toastEl,notiAlertEl,fileInput,drawerEl,isWide?wideNav:nav);
+  return h('div',{style:{...S.root,maxWidth:isWide?780:480}},header,searchP,h('div',{style:S.content},content),fab,editM,editRM,confirmDialog,restorePromptEl,toastEl,notiAlertEl,fileInput,drawerEl,isWide?wideNav:nav);
 }
 
 
