@@ -1397,7 +1397,7 @@ function App(){
         h('span',{style:{fontSize:11,fontWeight:600,color:C.accent}},repeatLabel(editTodo.repeatType)+' 반복'),
         h('span',{style:{fontSize:10,color:C.text3}},'(그룹 일정)')
       ):null,
-      h('textarea',{placeholder:'메모',value:eMemo,onChange:e=>sEMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden',background:viewOnly?C.border2:C.bg},readOnly:viewOnly}),
+      h('textarea',{placeholder:'메모',value:eMemo,onChange:e=>sEMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},ref:el=>{if(el&&eMemo){el.style.height='auto';el.style.height=el.scrollHeight+'px'}},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden',background:viewOnly?C.border2:C.bg},readOnly:viewOnly}),
       clUI(eCL,sECL,eCLOpen,sECLOpen,viewOnly,'edit'),
       viewOnly?h('button',{onClick:()=>{setEditTodo(null);setViewOnly(false)},style:{...S.submitBtn,background:C.text3}},'닫기'):null,
       !viewOnly?h('button',{onClick:saveEdit,style:S.submitBtn},'저장'):null,
@@ -1417,7 +1417,7 @@ function App(){
       h('input',{type:'text',value:erT,onChange:e=>sERT(e.target.value),style:{...S.input,background:viewOnly?C.border2:C.bg},readOnly:viewOnly,onKeyDown:e=>e.key==='Enter'&&saveEditRec()}),
       h('div',{style:{display:'flex',gap:6,alignItems:'center'}},h('input',{type:'date',value:erSD,onChange:e=>sERSD(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly}),h('span',{style:{color:C.text3,fontSize:12,marginBottom:7}},'~'),h('input',{type:'date',value:erED,onChange:e=>sERED(e.target.value),style:{...S.input,flex:1},readOnly:viewOnly})),
       tagDropdowns(erTgs,sERTgs,viewOnly),
-      h('textarea',{placeholder:'메모',value:erMemo,onChange:e=>sERMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden',background:viewOnly?C.border2:C.bg},readOnly:viewOnly}),
+      h('textarea',{placeholder:'메모',value:erMemo,onChange:e=>sERMemo(e.target.value),onInput:e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'},ref:el=>{if(el&&erMemo){el.style.height='auto';el.style.height=el.scrollHeight+'px'}},rows:1,style:{...S.input,resize:'none',fontFamily:'inherit',minHeight:32,overflow:'hidden',background:viewOnly?C.border2:C.bg},readOnly:viewOnly}),
       viewOnly?h('button',{onClick:()=>{setEditRec(null);setViewOnly(false)},style:{...S.submitBtn,background:C.text3}},'닫기'):null,
       !viewOnly?h('button',{onClick:saveEditRec,style:S.submitBtn},'저장'):null,
       !viewOnly?h('button',{onClick:delEditRec,style:S.delBtn},'삭제'):null
