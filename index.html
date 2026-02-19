@@ -204,6 +204,8 @@ function App(){
   const[partnerProfile,setPartnerProfile]=useState(null);
   const fbRef=useRef(null);
   const fbWriteTimer=useRef(null);
+  const fbBackupTimer=useRef(null);
+  const backupRestored=useRef(false);
   const[fbBackupList,setFbBackupList]=useState([]);
   const[showRestorePrompt,setShowRestorePrompt]=useState(false);
   const[lastBackupTime,setLastBackupTime]=useState(null);
