@@ -208,6 +208,8 @@ function App(){
   const backupRestored=useRef(false);
   const[fbBackupList,setFbBackupList]=useState([]);
   const[showRestorePrompt,setShowRestorePrompt]=useState(false);
+  const[restoreConfirm,setRestoreConfirm]=useState(null);// {type:'restore'|'new', code, name, input}
+  const[restoreInput,setRestoreInput]=useState('');
   const[lastBackupTime,setLastBackupTime]=useState(null);
 
   const genCode=()=>{const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';for(let i=0;i<6;i++)r+=c[Math.floor(Math.random()*c.length)];return r};
@@ -310,6 +312,7 @@ function App(){
         if(val.settings.rvColor){setRvColor(val.settings.rvColor);sv(SK.rvColor,val.settings.rvColor)}
       }
       setShowRestorePrompt(false);
+      setRestoreConfirm(null);setRestoreInput('');
       setTimeout(()=>{backupRestored.current=false},5000);
       showToast('✅ 클라우드에서 복원 완료!');
     });
@@ -1060,31 +1063,74 @@ function App(){
   // ★ Cloud restore prompt
   const restorePromptEl=showRestorePrompt&&fbBackupList.length>0?h('div',{style:S.overlay},
     h('div',{style:{background:C.card,borderRadius:16,padding:20,maxWidth:360,width:'90%',animation:'scaleIn 0.15s ease',boxShadow:'0 4px 24px rgba(0,0,0,0.2)'},onClick:e=>e.stopPropagation()},
-      h('div',{style:{textAlign:'center',marginBottom:14}},
-        h('div',{style:{fontSize:32,marginBottom:6}},'☁️'),
-        h('div',{style:{fontSize:15,fontWeight:700,color:C.text}},'클라우드 백업 발견!'),
-        h('div',{style:{fontSize:11,color:C.text3,marginTop:4}},'복원할 데이터를 선택하세요')
-      ),
-      ...fbBackupList.map(b=>{
-        const d=b.updatedAt?new Date(b.updatedAt):null;
-        const timeStr=d?(d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'):'';
-        return h('button',{key:b.code,onClick:()=>restoreFromCloud(b.code),style:{
-          width:'100%',padding:'12px 14px',marginBottom:8,background:C.accent+'08',
-          border:'1px solid '+C.accent+'30',borderRadius:10,cursor:'pointer',
-          display:'flex',alignItems:'center',gap:10,textAlign:'left'
-        }},
-          h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.accent+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}},'📱'),
-          h('div',{style:{flex:1,minWidth:0}},
-            h('div',{style:{fontSize:14,fontWeight:700,color:C.text}},b.name),
-            h('div',{style:{fontSize:10,color:C.text3}},timeStr?'마지막 동기화: '+timeStr:'')
-          ),
-          h('div',{style:{fontSize:11,color:C.accent,fontWeight:600}},'복원 →')
+      // ★ 확인 입력 단계
+      restoreConfirm?h('div',null,
+        h('div',{style:{textAlign:'center',marginBottom:14}},
+          h('div',{style:{fontSize:32,marginBottom:6}},restoreConfirm.type==='restore'?'🔐':'⚠️'),
+          h('div',{style:{fontSize:14,fontWeight:700,color:C.text}},
+            restoreConfirm.type==='restore'?'본인 확인':'새로 시작 확인'),
+          h('div',{style:{fontSize:12,color:C.text2,marginTop:6,lineHeight:'1.5'}},
+            restoreConfirm.type==='restore'
+              ?'"'+restoreConfirm.name+'"을(를) 정확히 입력하세요'
+              :'"새로 시작"을 정확히 입력하세요')
+        ),
+        h('input',{type:'text',value:restoreInput,onChange:e=>setRestoreInput(e.target.value),
+          placeholder:restoreConfirm.type==='restore'?restoreConfirm.name:'새로 시작',
+          onKeyDown:e=>{
+            if(e.key==='Enter'){
+              const target=restoreConfirm.type==='restore'?restoreConfirm.name:'새로 시작';
+              if(restoreInput.trim()===target){
+                if(restoreConfirm.type==='restore')restoreFromCloud(restoreConfirm.code);
+                else{setShowRestorePrompt(false);setRestoreConfirm(null)}
+              }else{showToast('⚠ 입력이 일치하지 않습니다')}
+            }
+          },
+          style:{...S.input,textAlign:'center',fontSize:16,fontWeight:600,marginBottom:4},autoFocus:true}),
+        h('div',{style:{display:'flex',gap:8,marginTop:8}},
+          h('button',{onClick:()=>{setRestoreConfirm(null);setRestoreInput('')},style:{
+            flex:1,padding:'10px',background:'transparent',color:C.text3,
+            border:'1px solid '+C.border,borderRadius:8,fontSize:12,cursor:'pointer'
+          }},'← 돌아가기'),
+          h('button',{onClick:()=>{
+            const target=restoreConfirm.type==='restore'?restoreConfirm.name:'새로 시작';
+            if(restoreInput.trim()===target){
+              if(restoreConfirm.type==='restore')restoreFromCloud(restoreConfirm.code);
+              else{setShowRestorePrompt(false);setRestoreConfirm(null)}
+            }else{showToast('⚠ 입력이 일치하지 않습니다')}
+          },style:{
+            flex:1,padding:'10px',background:restoreConfirm.type==='restore'?C.accent:C.red,
+            color:'#FFF',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'
+          }},restoreConfirm.type==='restore'?'복원':'새로 시작')
         )
-      }),
-      h('button',{onClick:()=>setShowRestorePrompt(false),style:{
-        width:'100%',padding:'10px',marginTop:4,background:'transparent',
-        color:C.text3,border:'1px solid '+C.border,borderRadius:8,fontSize:12,cursor:'pointer'
-      }},'건너뛰기 (새로 시작)')
+      )
+      // ★ 목록 선택 단계
+      :h('div',null,
+        h('div',{style:{textAlign:'center',marginBottom:14}},
+          h('div',{style:{fontSize:32,marginBottom:6}},'☁️'),
+          h('div',{style:{fontSize:15,fontWeight:700,color:C.text}},'클라우드 백업 발견!'),
+          h('div',{style:{fontSize:11,color:C.text3,marginTop:4}},'복원할 데이터를 선택하세요')
+        ),
+        ...fbBackupList.map(b=>{
+          const d=b.updatedAt?new Date(b.updatedAt):null;
+          const timeStr=d?(d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'):'';
+          return h('button',{key:b.code,onClick:()=>{setRestoreConfirm({type:'restore',code:b.code,name:b.name});setRestoreInput('')},style:{
+            width:'100%',padding:'12px 14px',marginBottom:8,background:C.accent+'08',
+            border:'1px solid '+C.accent+'30',borderRadius:10,cursor:'pointer',
+            display:'flex',alignItems:'center',gap:10,textAlign:'left'
+          }},
+            h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.accent+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}},'📱'),
+            h('div',{style:{flex:1,minWidth:0}},
+              h('div',{style:{fontSize:14,fontWeight:700,color:C.text}},b.name),
+              h('div',{style:{fontSize:10,color:C.text3}},timeStr?'마지막 동기화: '+timeStr:'')
+            ),
+            h('div',{style:{fontSize:11,color:C.accent,fontWeight:600}},'복원 →')
+          )
+        }),
+        h('button',{onClick:()=>{setRestoreConfirm({type:'new'});setRestoreInput('')},style:{
+          width:'100%',padding:'10px',marginTop:4,background:'transparent',
+          color:C.text3,border:'1px solid '+C.border,borderRadius:8,fontSize:12,cursor:'pointer'
+        }},'새로 시작')
+      )
     )
   ):null;
 
